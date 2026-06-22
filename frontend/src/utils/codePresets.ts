@@ -3,17 +3,21 @@ import { CodeTemplate } from '../types';
 export const CODE_PRESETS: Record<string, CodeTemplate> = {
   blink: {
     name: 'LED Verification Circuit',
-    description: 'A simple hardwired circuit verifying that an LED illuminates when correctly connected to 5V power and Ground.',
-    code: `// Smart IOT - Verification Circuit
-// This circuit relies on hardwired 5V power and does not require code to execute.
-// Switch to 'Circuit Mode' to validate electrical connectivity.
+    description: 'Blink the onboard LED on pin 13, or run in Circuit Mode to test a hardwired LED.',
+    code: `// Blink — onboard LED on pin 13 (Tinkercad-style)
+const int ledPin = 13;
 
 void setup() {
-  // Empty
+  pinMode(ledPin, OUTPUT);
+  Serial.begin(9600);
+  Serial.println("Blink started on pin 13");
 }
 
 void loop() {
-  // Empty
+  digitalWrite(ledPin, HIGH);
+  delay(1000);
+  digitalWrite(ledPin, LOW);
+  delay(1000);
 }
 `,
     components: [

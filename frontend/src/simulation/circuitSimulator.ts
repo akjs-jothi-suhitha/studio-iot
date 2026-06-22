@@ -135,6 +135,7 @@ export class CircuitSimulator {
     this.state.ledWarnings = {};
     this.state.buzzerStates = {};
     this.state.motorSpeeds = {};
+    this.state.servoAngles = {};
     this.state.lcdLines = {};
     this.state.validationErrors = [];
     this.state.serialLogs.push('--- Simulation Stopped ---');
@@ -394,6 +395,22 @@ export class CircuitSimulator {
     const nextLedWarnings: Record<string, string> = {};
     const nextBuzzerStates: Record<string, boolean> = {};
     const nextMotorSpeeds: Record<string, number> = {};
+    const nextServoAngles: Record<string, number> = { ...this.state.servoAngles };
+
+    for (const comp of this.components) {
+      if (comp.type === 'push_button' && comp.state?.active) {
+        for (const pin of ['terminal_1a', 'terminal_1b', 'terminal_2a', 'terminal_2b']) {
+          const pinKey = getPinKey(comp.id, pin);
+          const net = nets.find(n => n.includes(pinKey));
+          net?.forEach(p => {
+            const state = netState.get(p);
+            if (state && state.type === 'floating') {
+              netState.set(p, { voltage: 5, type: 'digital' });
+            }
+          });
+        }
+      }
+    }
 
     for (const comp of this.components) {
       if (comp.type === 'led') {
@@ -449,6 +466,7 @@ export class CircuitSimulator {
     this.state.ledWarnings = nextLedWarnings;
     this.state.buzzerStates = nextBuzzerStates;
     this.state.motorSpeeds = nextMotorSpeeds;
+    this.state.servoAngles = nextServoAngles;
     
     // Also track active nets for wire flow animation
     // We can just trigger an update so Canvas can re-render
@@ -498,8 +516,8 @@ export class CircuitSimulator {
 
     const digitalRead = (pin: any): number => {
       const pinStr = String(pin);
-      const btn = self.components.find(c => c.type === 'push_button');
-      if (btn && btn.state?.active) {
+      const activeButton = self.components.find(c => c.type === 'push_button' && c.state?.active);
+      if (activeButton) {
         return 1;
       }
       return self.state.digitalPins[pinStr] || 0;
@@ -554,11 +572,38 @@ export class CircuitSimulator {
       clear: () => {
         self.updateLcd('', '');
       },
-      setCursor: (col: number, row: number) => {},
+      setCursor: (_col: number, _row: number) => {},
       print: (text: string) => {
         self.updateLcd(String(text), '');
       }
     };
+
+    class ServoMock {
+      private pin = -1;
+
+      attach(p: number) {
+        this.pin = p;
+        return 1;
+      }
+
+      write(angle: number) {
+        const servo = self.components.find(c => c.type === 'servo');
+        if (servo) {
+          self.state.servoAngles[servo.id] = Math.max(0, Math.min(180, angle));
+          self.onStateUpdate({ ...self.state });
+        }
+        if (this.pin >= 0) {
+          self.state.digitalPins[String(this.pin)] = angle > 90 ? 1 : 0;
+          self.evaluateElectricalNets();
+        }
+      }
+
+      detach() {
+        this.pin = -1;
+      }
+    }
+
+    const Servo = ServoMock;
 
     const map = (val: number, in_min: number, in_max: number, out_min: number, out_max: number): number => {
       return Math.round(((val - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min);
@@ -583,7 +628,7 @@ export class CircuitSimulator {
     try {
       const sandboxFunc = new Function(
         'sleep', 'pinMode', 'digitalWrite', 'analogWrite', 'digitalRead', 'analogRead',
-        'tone', 'noTone', 'Serial', 'lcd', 'map', 'constrain',
+        'tone', 'noTone', 'Serial', 'lcd', 'Servo', 'map', 'constrain',
         'HIGH', 'LOW', 'OUTPUT', 'INPUT', 'INPUT_PULLUP',
         'A0', 'A1', 'A2', 'A3', 'A4', 'A5',
         `
@@ -597,7 +642,7 @@ export class CircuitSimulator {
 
       const resolvedFunctions = sandboxFunc(
         sleep, pinMode, digitalWrite, analogWrite, digitalRead, analogRead,
-        tone, noTone, Serial, lcd, map, constrain,
+        tone, noTone, Serial, lcd, Servo, map, constrain,
         HIGH, LOW, OUTPUT, INPUT, INPUT_PULLUP,
         A0, A1, A2, A3, A4, A5
       );

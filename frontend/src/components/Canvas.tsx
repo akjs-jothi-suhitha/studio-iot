@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ComponentInstance, Wire } from '../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ComponentInstance, ComponentType, Wire } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
-import { RealisticComponent } from './RealisticComponent';
+import { findNearestPin, getPinAbsoluteCoords } from '../utils/pinCoords';
+import { FritzingComponent } from './FritzingComponent';
 
 interface CanvasProps {
   components: ComponentInstance[];
@@ -18,44 +19,30 @@ interface CanvasProps {
   servoAngles: Record<string, number>;
   motorSpeeds: Record<string, number>;
   lcdLines: Record<string, [string, string]>;
+  digitalPins: Record<string, number>;
   validationErrors?: string[];
-  onValueChange: (id: string, val: any) => void;
+  onValueChange: (id: string, val: unknown) => void;
+  onComponentStateChange: (id: string, partialState: ComponentInstance['state']) => void;
+  onReleaseMomentaryInputs: () => void;
   zoom: number;
   setZoom: (zoom: number) => void;
   pushHistory: (comps: ComponentInstance[], wires: Wire[]) => void;
+  pendingComponentType: ComponentType | null;
+  onPlaceComponent: (type: ComponentType, x: number, y: number) => void;
+  onCancelPlacement: () => void;
 }
 
-// Helper to calculate absolute canvas pin coordinates under rotation
-export const getPinAbsoluteCoords = (instance: ComponentInstance, pinId: string): { x: number; y: number } => {
-  const def = COMPONENT_DEFINITIONS[instance.type];
-  if (!def) return { x: 0, y: 0 };
+const GRID_SIZE = 10;
+const WIRE_SAG = 48;
+const PIN_SNAP_DISTANCE = 16;
 
-  const pin = def.pins.find(p => p.id === pinId);
-  if (!pin) return { x: 0, y: 0 };
+export { getPinAbsoluteCoords };
 
-  const cx = instance.x;
-  const cy = instance.y;
-  const W = def.width;
-  const H = def.height;
-  const rot = instance.rotation || 0;
+const snapToGrid = (value: number): number => Math.round(value / GRID_SIZE) * GRID_SIZE;
 
-  // Center coordinate
-  const ox = cx + W / 2;
-  const oy = cy + H / 2;
-
-  // Relative pin coordinates from center
-  const rx = pin.x - W / 2;
-  const ry = pin.y - H / 2;
-
-  // Rotate around center
-  const rad = (rot * Math.PI) / 180;
-  const rxRot = rx * Math.cos(rad) - ry * Math.sin(rad);
-  const ryRot = rx * Math.sin(rad) + ry * Math.cos(rad);
-
-  return {
-    x: ox + rxRot,
-    y: oy + ryRot,
-  };
+const buildBezierPath = (from: { x: number; y: number }, to: { x: number; y: number }) => {
+  const midY = Math.max(from.y, to.y) + WIRE_SAG;
+  return `M ${from.x} ${from.y} C ${from.x} ${midY} ${to.x} ${midY} ${to.x} ${to.y}`;
 };
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -73,392 +60,456 @@ export const Canvas: React.FC<CanvasProps> = ({
   servoAngles,
   motorSpeeds,
   lcdLines,
+  digitalPins,
   validationErrors = [],
   onValueChange,
+  onComponentStateChange,
+  onReleaseMomentaryInputs,
   zoom,
   setZoom,
   pushHistory,
+  pendingComponentType,
+  onPlaceComponent,
+  onCancelPlacement,
 }) => {
-  const [panX, setPanX] = useState<number>(0);
-  const [panY, setPanY] = useState<number>(0);
-  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const [panX, setPanX] = useState(40);
+  const [panY, setPanY] = useState(30);
+  const [isPanning, setIsPanning] = useState(false);
   const [draggedCompId, setDraggedCompId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  // Wiring state
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [activeWiringSrc, setActiveWiringSrc] = useState<{ compId: string; pinId: string } | null>(null);
-  const [mousePos, setMousePos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [hoveredPin, setHoveredPin] = useState<{ compId: string; pinId: string } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const panStartRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const panStartRef = useRef({ x: 0, y: 0 });
+  const draggedSnapshotRef = useRef<ComponentInstance[] | null>(null);
 
-  // Grid Snapping
-  const snapToGrid = (val: number): number => {
-    return Math.round(val / 10) * 10;
-  };
+  const isWiring = Boolean(activeWiringSrc);
 
-  // Convert client cursor coords to scaled, panned canvas coordinates
+  const pendingPreview = useMemo(() => {
+    if (!pendingComponentType) {
+      return null;
+    }
+    const def = COMPONENT_DEFINITIONS[pendingComponentType];
+    if (!def) {
+      return null;
+    }
+    return {
+      x: snapToGrid(mousePos.x - def.width / 2),
+      y: snapToGrid(mousePos.y - def.height / 2),
+      width: def.width,
+      height: def.height,
+      type: pendingComponentType,
+    };
+  }, [mousePos.x, mousePos.y, pendingComponentType]);
+
   const clientToCanvasCoords = (clientX: number, clientY: number) => {
-    if (!containerRef.current) return { x: clientX, y: clientY };
+    if (!containerRef.current) {
+      return { x: clientX, y: clientY };
+    }
     const rect = containerRef.current.getBoundingClientRect();
-    const x = (clientX - rect.left - panX) / (zoom / 100);
-    const y = (clientY - rect.top - panY) / (zoom / 100);
-    return { x, y };
+    return {
+      x: (clientX - rect.left - panX) / (zoom / 100),
+      y: (clientY - rect.top - panY - 44) / (zoom / 100),
+    };
   };
 
-  // Key handlers for delete and rotate shortcut keys
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+  const finishInteraction = () => {
+    if (draggedCompId && draggedSnapshotRef.current) {
+      pushHistory(draggedSnapshotRef.current, wires);
+    }
+    draggedSnapshotRef.current = null;
+    setDraggedCompId(null);
+    setIsPanning(false);
+    onReleaseMomentaryInputs();
+  };
 
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedId) {
-          // If wire is selected
-          if (wires.some(w => w.id === selectedId)) {
-            const nextWires = wires.filter(w => w.id !== selectedId);
-            onUpdateWires(nextWires);
-            pushHistory(components, nextWires);
-          } else {
-            // Component selected
-            const nextComps = components.filter(c => c.id !== selectedId);
-            // Delete connected wires
-            const nextWires = wires.filter(w => w.fromComponentId !== selectedId && w.toComponentId !== selectedId);
-            onUpdateComponents(nextComps);
-            onUpdateWires(nextWires);
-            pushHistory(nextComps, nextWires);
-          }
+  const resolvePinFromEvent = (event: React.MouseEvent, canvasCoords: { x: number; y: number }) => {
+    const target = event.target as Element;
+    const pinElement = target.closest('[data-pin-id]');
+    if (pinElement) {
+      const compId = pinElement.getAttribute('data-component-id');
+      const pinId = pinElement.getAttribute('data-pin-id');
+      if (compId && pinId) {
+        return { compId, pinId };
+      }
+    }
+    const nearest = findNearestPin(components, canvasCoords, PIN_SNAP_DISTANCE);
+    if (nearest) {
+      return { compId: nearest.componentId, pinId: nearest.pinId };
+    }
+    return null;
+  };
+
+  const wireExists = (from: { compId: string; pinId: string }, to: { compId: string; pinId: string }) =>
+    wires.some((wire) => {
+      const same =
+        wire.fromComponentId === from.compId &&
+        wire.fromPinId === from.pinId &&
+        wire.toComponentId === to.compId &&
+        wire.toPinId === to.pinId;
+      const opposite =
+        wire.toComponentId === from.compId &&
+        wire.toPinId === from.pinId &&
+        wire.fromComponentId === to.compId &&
+        wire.fromPinId === to.pinId;
+      return same || opposite;
+    });
+
+  const connectPins = (from: { compId: string; pinId: string }, to: { compId: string; pinId: string }) => {
+    if (from.compId === to.compId && from.pinId === to.pinId) {
+      return;
+    }
+    if (wireExists(from, to)) {
+      return;
+    }
+    const nextWires = [
+      ...wires,
+      {
+        id: `wire_${Date.now()}`,
+        fromComponentId: from.compId,
+        fromPinId: from.pinId,
+        toComponentId: to.compId,
+        toPinId: to.pinId,
+        color: activeWireColor,
+      },
+    ];
+    onUpdateWires(nextWires);
+    pushHistory(components, nextWires);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (event.key === 'Escape') {
+        if (activeWiringSrc) {
+          setActiveWiringSrc(null);
+          setHoveredPin(null);
+        } else if (pendingComponentType) {
+          onCancelPlacement();
+        } else {
           onSelect(null);
         }
       }
-
-      if (e.key === 'r' || e.key === 'R') {
-        if (selectedId && !wires.some(w => w.id === selectedId)) {
-          const nextComps = components.map(c => {
-            if (c.id === selectedId) {
-              return { ...c, rotation: ((c.rotation || 0) + 90) % 360 };
-            }
-            return c;
-          });
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) {
+        if (wires.some((wire) => wire.id === selectedId)) {
+          const nextWires = wires.filter((wire) => wire.id !== selectedId);
+          onUpdateWires(nextWires);
+          pushHistory(components, nextWires);
+        } else {
+          const nextComps = components.filter((component) => component.id !== selectedId);
+          const nextWires = wires.filter(
+            (wire) => wire.fromComponentId !== selectedId && wire.toComponentId !== selectedId,
+          );
           onUpdateComponents(nextComps);
-          pushHistory(nextComps, wires);
+          onUpdateWires(nextWires);
+          pushHistory(nextComps, nextWires);
         }
+        onSelect(null);
+      }
+      if ((event.key === 'r' || event.key === 'R') && selectedId && !wires.some((wire) => wire.id === selectedId)) {
+        const nextComps = components.map((component) =>
+          component.id === selectedId
+            ? { ...component, rotation: ((component.rotation || 0) + 90) % 360 }
+            : component,
+        );
+        onUpdateComponents(nextComps);
+        pushHistory(nextComps, wires);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, components, wires]);
+    window.addEventListener('mouseup', finishInteraction);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('mouseup', finishInteraction);
+    };
+  }, [
+    activeWiringSrc,
+    components,
+    onCancelPlacement,
+    onSelect,
+    onUpdateComponents,
+    onUpdateWires,
+    pendingComponentType,
+    pushHistory,
+    selectedId,
+    wires,
+  ]);
 
-  // Handle zooming via mouse wheel scroll
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY;
-    const zoomFactor = delta > 0 ? -5 : 5;
-    const nextZoom = Math.min(200, Math.max(20, zoom + zoomFactor));
-    setZoom(nextZoom);
+  const handleWheel = (event: React.WheelEvent) => {
+    event.preventDefault();
+    setZoom(Math.max(20, Math.min(200, event.deltaY > 0 ? zoom - 5 : zoom + 5)));
   };
 
-  // Canvas Mouse Actions
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // 1. Check if clicking on pin target
-    const pinEl = (e.target as HTMLElement).closest('[data-pin-id]');
-    if (pinEl) {
-      e.stopPropagation();
-      const compId = pinEl.getAttribute('data-component-id')!;
-      const pinId = pinEl.getAttribute('data-pin-id')!;
+  const handleMouseDown = (event: React.MouseEvent) => {
+    const canvasCoords = clientToCanvasCoords(event.clientX, event.clientY);
+    setMousePos(canvasCoords);
 
-      if (!activeWiringSrc) {
-        // Start wiring
-        setActiveWiringSrc({ compId, pinId });
-        const startCoords = getPinAbsoluteCoords(components.find(c => c.id === compId)!, pinId);
-        setMousePos(startCoords);
-      } else {
-        // Complete wiring
-        if (activeWiringSrc.compId !== compId || activeWiringSrc.pinId !== pinId) {
-          const newWire: Wire = {
-            id: `wire_${Date.now()}`,
-            fromComponentId: activeWiringSrc.compId,
-            fromPinId: activeWiringSrc.pinId,
-            toComponentId: compId,
-            toPinId: pinId,
-            color: activeWireColor,
-          };
-          const nextWires = [...wires, newWire];
-          onUpdateWires(nextWires);
-          pushHistory(components, nextWires);
+    if (!pendingComponentType) {
+      const pinHit = resolvePinFromEvent(event, canvasCoords);
+      if (pinHit) {
+        event.stopPropagation();
+        if (!activeWiringSrc) {
+          setActiveWiringSrc(pinHit);
+          const start = getPinAbsoluteCoords(
+            components.find((c) => c.id === pinHit.compId)!,
+            pinHit.pinId,
+          );
+          setMousePos(start);
+        } else {
+          connectPins(activeWiringSrc, pinHit);
+          setActiveWiringSrc(null);
+          setHoveredPin(null);
         }
-        setActiveWiringSrc(null);
+        return;
       }
-      return;
     }
 
-    // 2. Check if clicking a component element
-    const compEl = (e.target as HTMLElement).closest('[data-component-instance-id]');
-    if (compEl) {
-      e.stopPropagation();
-      const compId = compEl.getAttribute('data-component-instance-id')!;
+    const componentElement = (event.target as Element).closest('[data-component-instance-id]');
+    if (componentElement && !pendingComponentType && !activeWiringSrc) {
+      event.stopPropagation();
+      const compId = componentElement.getAttribute('data-component-instance-id');
+      if (!compId) {
+        return;
+      }
+      const component = components.find((item) => item.id === compId);
+      if (!component) {
+        return;
+      }
       onSelect(compId, false);
-
-      const comp = components.find(c => c.id === compId)!;
-      const canvasCoords = clientToCanvasCoords(e.clientX, e.clientY);
       setDraggedCompId(compId);
-      setDragOffset({
-        x: canvasCoords.x - comp.x,
-        y: canvasCoords.y - comp.y,
-      });
+      setDragOffset({ x: canvasCoords.x - component.x, y: canvasCoords.y - component.y });
       return;
     }
 
-    // 3. Otherwise clicking empty canvas space -> Start panning
     if (activeWiringSrc) {
-      // Cancel active wiring if clicked empty space
       setActiveWiringSrc(null);
+      setHoveredPin(null);
+      return;
+    }
+
+    if (pendingComponentType) {
+      const definition = COMPONENT_DEFINITIONS[pendingComponentType];
+      onPlaceComponent(
+        pendingComponentType,
+        snapToGrid(canvasCoords.x - definition.width / 2),
+        snapToGrid(canvasCoords.y - definition.height / 2),
+      );
       return;
     }
 
     onSelect(null);
     setIsPanning(true);
-    panStartRef.current = {
-      x: e.clientX - panX,
-      y: e.clientY - panY,
-    };
+    panStartRef.current = { x: event.clientX - panX, y: event.clientY - panY };
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    const canvasCoords = clientToCanvasCoords(e.clientX, e.clientY);
+  const handleMouseMove = (event: React.MouseEvent) => {
+    const canvasCoords = clientToCanvasCoords(event.clientX, event.clientY);
+    setMousePos(canvasCoords);
 
-    // Dynamic wiring line update
     if (activeWiringSrc) {
-      setMousePos(canvasCoords);
-
-      // Detect hovering over target pin
-      const pinEl = (e.target as HTMLElement).closest('[data-pin-id]');
-      if (pinEl) {
-        const compId = pinEl.getAttribute('data-component-id')!;
-        const pinId = pinEl.getAttribute('data-pin-id')!;
-        setHoveredPin({ compId, pinId });
-      } else {
-        setHoveredPin(null);
+      const nearest = findNearestPin(components, canvasCoords, PIN_SNAP_DISTANCE, {
+        componentId: activeWiringSrc.compId,
+        pinId: activeWiringSrc.pinId,
+      });
+      setHoveredPin(nearest ? { compId: nearest.componentId, pinId: nearest.pinId } : null);
+      if (nearest) {
+        setMousePos({ x: nearest.x, y: nearest.y });
       }
       return;
     }
 
-    // Panning canvas
     if (isPanning) {
-      setPanX(e.clientX - panStartRef.current.x);
-      setPanY(e.clientY - panStartRef.current.y);
+      setPanX(event.clientX - panStartRef.current.x);
+      setPanY(event.clientY - panStartRef.current.y);
       return;
     }
 
-    // Dragging component
     if (draggedCompId) {
-      const nextComps = components.map(c => {
-        if (c.id === draggedCompId) {
-          return {
-            ...c,
-            x: snapToGrid(canvasCoords.x - dragOffset.x),
-            y: snapToGrid(canvasCoords.y - dragOffset.y),
-          };
-        }
-        return c;
-      });
+      const nextComps = components.map((component) =>
+        component.id === draggedCompId
+          ? {
+              ...component,
+              x: snapToGrid(canvasCoords.x - dragOffset.x),
+              y: snapToGrid(canvasCoords.y - dragOffset.y),
+            }
+          : component,
+      );
+      draggedSnapshotRef.current = nextComps;
       onUpdateComponents(nextComps);
     }
   };
 
-  const handleMouseUp = () => {
-    if (draggedCompId) {
-      pushHistory(components, wires);
-    }
-    setIsPanning(false);
-    setDraggedCompId(null);
-  };
-
-  // Helper to render wire paths with nice 3D drooping curves and copper pins at ends
   const renderWire = (wire: Wire) => {
-    const fromComp = components.find(c => c.id === wire.fromComponentId);
-    const toComp = components.find(c => c.id === wire.toComponentId);
-    if (!fromComp || !toComp) return null;
+    const fromComp = components.find((component) => component.id === wire.fromComponentId);
+    const toComp = components.find((component) => component.id === wire.toComponentId);
+    if (!fromComp || !toComp) {
+      return null;
+    }
 
     const fromCoords = getPinAbsoluteCoords(fromComp, wire.fromPinId);
     const toCoords = getPinAbsoluteCoords(toComp, wire.toPinId);
-
-    // Drooping Bezier Curve parameters: y+delta control points
-    const dy = 55;
-    const pathString = `M ${fromCoords.x} ${fromCoords.y} C ${fromCoords.x} ${fromCoords.y + dy} ${toCoords.x} ${toCoords.y + dy} ${toCoords.x} ${toCoords.y}`;
-
+    const path = buildBezierPath(fromCoords, toCoords);
     const isSelected = selectedId === wire.id;
 
     return (
-      <g key={wire.id} onClick={(e) => { e.stopPropagation(); onSelect(wire.id, true); }}>
-        {/* Click hover expansion zone */}
-        <path d={pathString} stroke="transparent" strokeWidth="12" fill="none" className="cursor-pointer" />
-        
-        {/* Selected Highlight backer */}
-        {isSelected && (
-          <path d={pathString} stroke="#3b82f6" strokeWidth="6.5" fill="none" opacity="0.5" />
-        )}
-
-        {/* Jumper wire pins at ends (metal tip and rubber boot) */}
-        {/* Start Pin */}
-        <circle cx={fromCoords.x} cy={fromCoords.y} r="2.5" fill="#e2e8f0" stroke="#64748b" strokeWidth="0.5" />
-        <circle cx={fromCoords.x} cy={fromCoords.y} r="4" fill={wire.color} stroke="none" opacity="0.8" />
-        
-        {/* End Pin */}
-        <circle cx={toCoords.x} cy={toCoords.y} r="2.5" fill="#e2e8f0" stroke="#64748b" strokeWidth="0.5" />
-        <circle cx={toCoords.x} cy={toCoords.y} r="4" fill={wire.color} stroke="none" opacity="0.8" />
-
-        {/* Real wire line */}
-        <path
-          d={pathString}
-          stroke={wire.color}
-          strokeWidth="3.2"
-          fill="none"
-          strokeLinecap="round"
-          className="transition-colors hover:stroke-opacity-80 cursor-pointer"
-        />
-        {/* Realistic wire core shadow */}
-        <path d={pathString} stroke="#000000" strokeWidth="1" fill="none" opacity="0.15" />
+      <g key={wire.id} onClick={(event) => { event.stopPropagation(); onSelect(wire.id, true); }}>
+        <path d={path} fill="none" stroke="transparent" strokeWidth="16" className="cursor-pointer" />
+        {isSelected && <path d={path} fill="none" stroke="#2563eb" strokeWidth="8" opacity="0.35" />}
+        <path d={path} fill="none" stroke={wire.color} strokeWidth="4" strokeLinecap="round" />
       </g>
     );
   };
 
+  const renderActiveWire = () => {
+    if (!activeWiringSrc) {
+      return null;
+    }
+    const source = components.find((component) => component.id === activeWiringSrc.compId);
+    if (!source) {
+      return null;
+    }
+    const startCoords = getPinAbsoluteCoords(source, activeWiringSrc.pinId);
+    const path = buildBezierPath(startCoords, mousePos);
+    const color = hoveredPin ? '#f59e0b' : activeWireColor;
+
+    return (
+      <path d={path} fill="none" stroke={color} strokeWidth="4" strokeDasharray="7 5" opacity="0.9" />
+    );
+  };
+
+  const renderComponentLayer = () =>
+    components.map((component) => {
+      const definition = COMPONENT_DEFINITIONS[component.type];
+      const isSelected = selectedId === component.id;
+      const onboardLed13 =
+        component.type === 'arduino_uno' &&
+        (digitalPins['13'] === 1 || ledStates[component.id] === true);
+
+      return (
+        <g key={component.id} data-component-instance-id={component.id}>
+          {isSelected && (
+            <rect
+              x={component.x - 4}
+              y={component.y - 4}
+              width={definition.width + 8}
+              height={definition.height + 8}
+              fill="none"
+              stroke="#2563eb"
+              strokeWidth="2"
+              strokeDasharray="5 4"
+              rx="4"
+              transform={`rotate(${component.rotation || 0}, ${component.x + definition.width / 2}, ${component.y + definition.height / 2})`}
+              pointerEvents="none"
+            />
+          )}
+          <FritzingComponent
+            instance={component}
+            isSelected={isSelected}
+            isWiring={isWiring}
+            wiringHoverPinId={
+              hoveredPin?.compId === component.id ? hoveredPin.pinId : null
+            }
+            ledState={ledStates[component.id]}
+            ledWarning={ledWarnings[component.id]}
+            onboardLed13={onboardLed13}
+            buzzerState={buzzerStates[component.id]}
+            servoAngle={servoAngles[component.id]}
+            motorSpeed={motorSpeeds[component.id]}
+            lcdText={lcdLines[component.id]}
+            onValueChange={onValueChange}
+            onComponentStateChange={onComponentStateChange}
+            isSimulating={isSimulating}
+          />
+        </g>
+      );
+    });
+
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 h-full overflow-hidden bg-[#e8ebf0] select-none"
+      className="relative flex-1 overflow-hidden bg-[#c8ccd2] select-none"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      style={{ cursor: isPanning ? 'grabbing' : 'default' }}
+      onMouseUp={finishInteraction}
+      style={{ cursor: pendingComponentType ? 'copy' : isPanning ? 'grabbing' : isWiring ? 'crosshair' : 'default' }}
     >
-      {/* Grid Pattern Background */}
-      <div 
-        className="absolute inset-0 pointer-events-none" 
-        style={{
-          backgroundImage: 'radial-gradient(#cbd5e1 1.5px, transparent 1.5px)',
-          backgroundSize: `${20 * (zoom / 100)}px ${20 * (zoom / 100)}px`,
-          backgroundPosition: `${panX}px ${panY}px`
-        }}
-      />
+      <div className="absolute inset-x-0 top-0 z-20 flex h-11 items-center justify-between border-b border-[#aeb4bc] bg-[#dfe3e8] px-4 text-xs text-slate-700">
+        <div className="flex items-center gap-2 font-semibold">
+          <span className="uppercase tracking-widest text-slate-500">Workplane</span>
+          {pendingComponentType && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-900">
+              Place {COMPONENT_DEFINITIONS[pendingComponentType].name}
+            </span>
+          )}
+          {isWiring && (
+            <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-sky-800">
+              Click another pin to connect wire
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setZoom(Math.max(20, zoom - 10))} className="rounded bg-white px-2 py-1 shadow-sm">−</button>
+          <span className="min-w-12 text-center font-mono">{zoom}%</span>
+          <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="rounded bg-white px-2 py-1 shadow-sm">+</button>
+          <button
+            onClick={() => { setZoom(100); setPanX(40); setPanY(30); }}
+            className="rounded bg-white px-2 py-1 shadow-sm"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
 
-      {/* Validation Errors Overlay */}
       {isSimulating && validationErrors.length > 0 && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 w-full max-w-lg z-30 flex flex-col space-y-2">
-          {validationErrors.map((error, idx) => (
-            <div key={idx} className="bg-red-50/90 backdrop-blur border border-red-200 text-red-700 px-4 py-2 rounded-lg shadow-sm text-xs font-semibold flex items-center">
-              <span className="mr-2">⚠️</span>
+        <div className="absolute left-1/2 top-14 z-30 w-full max-w-xl -translate-x-1/2 space-y-2 px-4">
+          {validationErrors.map((error, index) => (
+            <div key={`${error}-${index}`} className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
               {error}
             </div>
           ))}
         </div>
       )}
 
-      {/* SVG Canvas Workspace */}
-      <svg
-        className="w-full h-full pointer-events-none"
-        style={{ pointerEvents: 'auto' }}
-      >
-        <g transform={`translate(${panX}, ${panY}) scale(${zoom / 100})`}>
-          
-          {/* 1. Render Components */}
-          {components.map((comp) => {
-            const isSelected = selectedId === comp.id;
-            const def = COMPONENT_DEFINITIONS[comp.type];
-            const W = def?.width || 100;
-            const H = def?.height || 100;
+      <div
+        className="absolute inset-0 mt-11"
+        style={{
+          backgroundColor: '#c8ccd2',
+          backgroundImage:
+            'linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px)',
+          backgroundSize: `${GRID_SIZE * (zoom / 100)}px ${GRID_SIZE * (zoom / 100)}px`,
+          backgroundPosition: `${panX}px ${panY}px`,
+        }}
+      />
 
-            return (
-              <g key={comp.id} data-component-instance-id={comp.id} style={{ pointerEvents: 'auto' }}>
-                
-                {/* Selection Outline Box */}
-                {isSelected && (
-                  <rect
-                    x={comp.x - 4}
-                    y={comp.y - 4}
-                    width={W + 8}
-                    height={H + 8}
-                    rx="6"
-                    fill="none"
-                    stroke="#3b82f6"
-                    strokeWidth="2.5"
-                    strokeDasharray="4 4"
-                    transform={`rotate(${comp.rotation || 0}, ${comp.x + W/2}, ${comp.y + H/2})`}
-                  />
-                )}
-
-                <RealisticComponent
-                  instance={comp}
-                  ledState={ledStates[comp.id]}
-                  ledWarning={ledWarnings[comp.id]}
-                  buzzerState={buzzerStates[comp.id]}
-                  servoAngle={servoAngles[comp.id]}
-                  motorSpeed={motorSpeeds[comp.id]}
-                  lcdText={lcdLines[comp.id]}
-                  onValueChange={onValueChange}
-                  isSimulating={isSimulating}
-                />
-              </g>
-            );
-          })}
-
-          {/* 2. Render Static completed Wires */}
+      <svg className="relative z-10 h-full w-full">
+        <g transform={`translate(${panX}, ${panY + 44}) scale(${zoom / 100})`}>
+          {renderComponentLayer()}
           {wires.map(renderWire)}
-
-          {/* 3. Render active Jumper Wire connector preview */}
-          {activeWiringSrc && (
-            <g>
-              <line x1={mousePos.x} y1={mousePos.y} x2={mousePos.x} y2={mousePos.y} />
-              {(() => {
-                const srcComp = components.find(c => c.id === activeWiringSrc.compId)!;
-                const startCoords = getPinAbsoluteCoords(srcComp, activeWiringSrc.pinId);
-                const dy = 55;
-                const pathString = `M ${startCoords.x} ${startCoords.y} C ${startCoords.x} ${startCoords.y + dy} ${mousePos.x} ${mousePos.y + dy} ${mousePos.x} ${mousePos.y}`;
-
-                return (
-                  <g>
-                    {/* Metal pin tip end */}
-                    <circle cx={mousePos.x} cy={mousePos.y} r="2" fill="#e2e8f0" stroke="#64748b" strokeWidth="0.5" />
-                    {/* Visual wire connector collar */}
-                    <circle cx={mousePos.x} cy={mousePos.y} r="3.5" fill={activeWireColor} opacity="0.8" />
-                    <path d={pathString} stroke={activeWireColor} strokeWidth="3" fill="none" opacity="0.65" />
-                  </g>
-                );
-              })()}
+          {renderActiveWire()}
+          {pendingPreview && (
+            <g opacity="0.45" pointerEvents="none">
+              <FritzingComponent
+                instance={{
+                  id: 'preview',
+                  type: pendingPreview.type,
+                  name: COMPONENT_DEFINITIONS[pendingPreview.type].name,
+                  x: pendingPreview.x,
+                  y: pendingPreview.y,
+                  rotation: 0,
+                }}
+                isSelected={false}
+                isSimulating={false}
+              />
             </g>
           )}
         </g>
       </svg>
-      {/* Zoom percentage & Interactive helper status footer */}
-      <div className="absolute bottom-4 right-4 flex items-center space-x-2 bg-white/95 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-200 shadow-md text-xs font-bold text-slate-700 z-20">
-        <button
-          onClick={() => setZoom(Math.max(20, zoom - 10))}
-          className="hover:text-blue-600 transition px-1"
-        >
-          -
-        </button>
-        <span className="w-10 text-center select-none font-mono">
-          {zoom}%
-        </span>
-        <button
-          onClick={() => setZoom(Math.min(200, zoom + 10))}
-          className="hover:text-blue-600 transition px-1"
-        >
-          +
-        </button>
-        <button
-          onClick={() => {
-            setZoom(100);
-            setPanX(0);
-            setPanY(0);
-          }}
-          className="text-[10px] text-blue-600 hover:underline border-l border-slate-200 pl-2 transition"
-        >
-          Reset
-        </button>
-      </div>
     </div>
   );
 };

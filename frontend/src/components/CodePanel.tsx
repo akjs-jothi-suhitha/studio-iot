@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Download, Upload, X } from 'lucide-react';
-import { CODE_PRESETS } from '../utils/codePresets';
+import React, { useEffect, useRef, useState } from 'react';
+import { Download, X } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 
 interface CodePanelProps {
@@ -9,8 +8,15 @@ interface CodePanelProps {
   serialLogs: string[];
   onClearSerial: () => void;
   onLoadTemplate: (templateKey: string) => void;
+  onClose: () => void;
   isSimulating: boolean;
 }
+
+const TEMPLATES = [
+  { key: 'blink', label: 'Blink — LED on pin 13' },
+  { key: 'gas_alarm', label: 'Gas alarm sensor' },
+  { key: 'light_control', label: 'Light control with LDR' },
+];
 
 export const CodePanel: React.FC<CodePanelProps> = ({
   code,
@@ -18,19 +24,28 @@ export const CodePanel: React.FC<CodePanelProps> = ({
   serialLogs,
   onClearSerial,
   onLoadTemplate,
+  onClose,
   isSimulating,
 }) => {
   const [templateKey, setTemplateKey] = useState<string>('blink');
   const [activeTab, setActiveTab] = useState<'code' | 'serial'>('code');
   const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // Handle template switch
   const handleTemplateChange = (key: string) => {
     setTemplateKey(key);
     onLoadTemplate(key);
   };
 
-  // Scroll to bottom of serial monitor
+  const handleDownload = () => {
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'sketch.ino';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     if (activeTab === 'serial' && logsEndRef.current) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -38,113 +53,108 @@ export const CodePanel: React.FC<CodePanelProps> = ({
   }, [serialLogs, activeTab]);
 
   return (
-    <div className="w-[550px] border-l border-slate-200 bg-white flex flex-col h-full select-none z-10 shadow-lg">
-      
-      {/* 1. Header with Close Button */}
-      <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200">
-        <h2 className="text-sm font-bold text-slate-800">Code Editor</h2>
-        <button className="text-slate-400 hover:text-slate-600 transition">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* 2. Top Toolbar */}
-      <div className="flex items-center space-x-3 px-4 py-2 bg-white border-b border-slate-200">
-        <select 
-          className="border border-slate-300 rounded px-2 py-1.5 text-sm text-slate-700 focus:outline-none bg-white hover:bg-slate-50 cursor-pointer"
-        >
-          <option>Text</option>
-          <option>Blocks</option>
-          <option>Blocks + Text</option>
-        </select>
-
-        <button className="p-1.5 text-slate-500 hover:text-slate-700 transition" title="Download Code">
-          <Download className="w-4 h-4" />
-        </button>
-        <button className="p-1.5 text-slate-500 hover:text-slate-700 transition" title="Upload to Board">
-          <Upload className="w-4 h-4" />
-        </button>
-
-        <select 
-          className="border border-slate-300 rounded px-2 py-1.5 text-sm text-slate-700 focus:outline-none bg-white hover:bg-slate-50 cursor-pointer"
-        >
-          <option>A Medium</option>
-          <option>A Small</option>
-          <option>A Large</option>
-        </select>
-
-        <select 
-          value={templateKey}
-          onChange={(e) => handleTemplateChange(e.target.value)}
-          disabled={isSimulating}
-          className="border border-slate-300 rounded px-2 py-1.5 text-sm text-slate-700 focus:outline-none bg-white hover:bg-slate-50 flex-1 cursor-pointer"
-        >
-          <option value="blink">1 (Arduino Uno R3) - LED Verification Circuit</option>
-          <option value="gas_alarm">1 (Arduino Uno R3) - Gas Alarm</option>
-          <option value="light_control">1 (Arduino Uno R3) - Light Control</option>
-        </select>
-      </div>
-
-      {/* 3. Tabs */}
-      <div className="flex border-b border-slate-200 bg-white">
+    <div className="flex h-full w-[min(480px,38vw)] min-w-[320px] shrink-0 flex-col border-l border-[#aeb4bc] bg-[#f4f6f8] shadow-xl">
+      <div className="flex items-center justify-between border-b border-[#aeb4bc] bg-[#dfe3e8] px-3 py-2.5">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Arduino</div>
+          <h2 className="text-sm font-semibold text-slate-800">Code & Serial</h2>
+        </div>
         <button
+          type="button"
+          onClick={onClose}
+          className="rounded p-1.5 text-slate-500 transition hover:bg-white hover:text-slate-800"
+          title="Close panel"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 border-b border-[#aeb4bc] bg-white px-3 py-2">
+        <select
+          value={templateKey}
+          onChange={(event) => handleTemplateChange(event.target.value)}
+          disabled={isSimulating}
+          className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500 disabled:opacity-50"
+        >
+          {TEMPLATES.map((template) => (
+            <option key={template.key} value={template.key}>
+              {template.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleDownload}
+          className="rounded border border-slate-200 bg-white p-1.5 text-slate-600 transition hover:bg-slate-50"
+          title="Download sketch"
+        >
+          <Download className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex border-b border-[#aeb4bc] bg-[#eef1f4]">
+        <button
+          type="button"
           onClick={() => setActiveTab('code')}
-          className={`flex-1 py-2 text-sm font-medium ${
+          className={`flex-1 py-2 text-xs font-semibold transition ${
             activeTab === 'code'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-slate-400 hover:text-slate-600'
+              ? 'border-b-2 border-sky-600 bg-white text-sky-700'
+              : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Code
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('serial')}
-          className={`flex-1 py-2 text-sm font-medium ${
+          className={`flex-1 py-2 text-xs font-semibold transition ${
             activeTab === 'serial'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-slate-400 hover:text-slate-600'
+              ? 'border-b-2 border-sky-600 bg-white text-sky-700'
+              : 'text-slate-500 hover:text-slate-700'
           }`}
         >
           Serial Monitor
         </button>
       </div>
 
-      {/* 4. Content Area */}
-      <div className="flex-1 overflow-hidden relative bg-white">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         {activeTab === 'code' ? (
-          <div className="w-full h-full">
-            <Editor
-              height="100%"
-              defaultLanguage="cpp"
-              language="cpp"
-              value={code}
-              onChange={(value) => onChangeCode(value || '')}
-              theme="vs-light"
-              options={{
-                readOnly: false,
-                minimap: { enabled: false },
-                fontSize: 13,
-                wordWrap: 'on',
-                scrollBeyondLastLine: false,
-                automaticLayout: true,
-              }}
-            />
-          </div>
+          <Editor
+            height="100%"
+            defaultLanguage="cpp"
+            language="cpp"
+            value={code}
+            onChange={(value) => onChangeCode(value || '')}
+            theme="vs"
+            options={{
+              readOnly: isSimulating,
+              minimap: { enabled: false },
+              fontSize: 13,
+              lineNumbers: 'on',
+              wordWrap: 'on',
+              scrollBeyondLastLine: false,
+              automaticLayout: true,
+              padding: { top: 12 },
+            }}
+          />
         ) : (
-          <div className="h-full flex flex-col font-mono text-[13px]">
-            <div className="flex-1 overflow-y-auto p-4 space-y-1 text-slate-700 bg-slate-50">
-              {serialLogs.map((log, idx) => (
-                <div key={idx}>{log}</div>
+          <div className="flex h-full flex-col bg-[#1e1e1e] font-mono text-[12px] text-green-400">
+            <div className="flex-1 overflow-y-auto p-3">
+              {serialLogs.map((log, index) => (
+                <div key={`${log}-${index}`} className="leading-5">
+                  {log}
+                </div>
               ))}
               {serialLogs.length === 0 && (
-                <div className="text-slate-400 italic">No output logs.</div>
+                <div className="italic text-slate-500">Run simulation to see serial output.</div>
               )}
               <div ref={logsEndRef} />
             </div>
-            <div className="p-3 border-t border-slate-200 bg-white flex justify-end">
-              <button 
+            <div className="flex justify-end border-t border-slate-700 bg-[#252526] p-2">
+              <button
+                type="button"
                 onClick={onClearSerial}
-                className="px-3 py-1.5 text-sm text-slate-600 border border-slate-300 rounded hover:bg-slate-50 transition"
+                className="rounded px-3 py-1 text-xs text-slate-300 transition hover:bg-slate-700"
               >
                 Clear
               </button>

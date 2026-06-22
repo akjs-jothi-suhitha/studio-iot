@@ -7,7 +7,6 @@ import { DashboardPanel } from './components/DashboardPanel';
 import { CODE_PRESETS } from './utils/codePresets';
 import { ComponentType, ComponentInstance, Wire, DashboardWidget, ProjectState } from './types';
 import { CircuitSimulator, SimulationState } from './simulation/circuitSimulator';
-import { LayoutGrid, Cpu } from 'lucide-react';
 
 export const App: React.FC = () => {
   // View mode: 'circuit' for designer canvas, 'dashboard' for Blynk IoT dashboard
@@ -20,6 +19,7 @@ export const App: React.FC = () => {
   const [isWireSelected, setIsWireSelected] = useState<boolean>(false);
   const [activeWireColor, setActiveWireColor] = useState<string>('#ef4444'); // default Red
   const [zoom, setZoom] = useState<number>(100);
+  const [pendingComponentType, setPendingComponentType] = useState<ComponentType | null>(null);
 
   // Editor states
   const [code, setCode] = useState<string>('');
@@ -75,6 +75,8 @@ export const App: React.FC = () => {
       setCode(prevState.code);
       setWidgets(prevState.widgets);
       setSelectedId(null);
+      setIsWireSelected(false);
+      setPendingComponentType(null);
       if (simulatorRef.current) {
         simulatorRef.current.updateCircuit(prevState.components, prevState.wires);
       }
@@ -91,6 +93,8 @@ export const App: React.FC = () => {
       setCode(nextState.code);
       setWidgets(nextState.widgets);
       setSelectedId(null);
+      setIsWireSelected(false);
+      setPendingComponentType(null);
       if (simulatorRef.current) {
         simulatorRef.current.updateCircuit(nextState.components, nextState.wires);
       }
@@ -132,6 +136,8 @@ export const App: React.FC = () => {
       setCode(template.code);
       setWidgets(template.widgets || []);
       setSelectedId(null);
+      setIsWireSelected(false);
+      setPendingComponentType(null);
       
       // Initialize template index inside history
       const stateSnapshot: ProjectState = {
@@ -149,24 +155,38 @@ export const App: React.FC = () => {
     }
   };
 
-  // Add component to canvas center
-  const handleAddComponent = (type: ComponentType) => {
-    // Offset from center slightly if multiples placed
-    const offset = components.length * 15;
-    const newComp: ComponentInstance = {
-      id: `${type}_${Date.now()}`,
-      type,
-      name: `${type.toUpperCase().replace('_', ' ')} ${components.length + 1}`,
-      x: 300 + (offset % 100),
-      y: 150 + (offset % 100),
-      rotation: 0,
-      color: type === 'led' ? '#ef4444' : undefined, // default Red for led
-      value: type === 'resistor' ? 220 : undefined,
-      state: type === 'gas_sensor' ? { sensorValue: 120 } : type === 'ldr' ? { sensorValue: 500 } : type === 'potentiometer' ? { sensorValue: 512 } : {},
-    };
+  const buildComponentInstance = (type: ComponentType, x: number, y: number): ComponentInstance => ({
+    id: `${type}_${Date.now()}`,
+    type,
+    name: `${type.toUpperCase().replace('_', ' ')} ${components.length + 1}`,
+    x,
+    y,
+    rotation: 0,
+    color: type === 'led' ? '#ef4444' : undefined,
+    value: type === 'resistor' ? 220 : undefined,
+    state:
+      type === 'gas_sensor'
+        ? { sensorValue: 120 }
+        : type === 'ldr'
+          ? { sensorValue: 500 }
+          : type === 'potentiometer'
+            ? { sensorValue: 512 }
+            : {},
+  });
 
+  const handleQueueComponent = (type: ComponentType) => {
+    setPendingComponentType(type);
+    setSelectedId(null);
+    setIsWireSelected(false);
+  };
+
+  const handlePlaceComponent = (type: ComponentType, x: number, y: number) => {
+    const newComp = buildComponentInstance(type, x, y);
     const nextComps = [...components, newComp];
     setComponents(nextComps);
+    setSelectedId(newComp.id);
+    setIsWireSelected(false);
+    setPendingComponentType(null);
     pushHistory(nextComps, wires);
   };
 
@@ -223,11 +243,58 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleComponentStateChange = (compId: string, partialState: ComponentInstance['state']) => {
+    const nextComps = components.map(c => {
+      if (c.id === compId) {
+        return {
+          ...c,
+          state: {
+            ...c.state,
+            ...partialState,
+          },
+        };
+      }
+      return c;
+    });
+
+    setComponents(nextComps);
+    if (simulatorRef.current) {
+      simulatorRef.current.updateCircuit(nextComps, wires);
+    }
+  };
+
+  const handleReleaseMomentaryInputs = () => {
+    const hasActiveButton = components.some(c => c.type === 'push_button' && c.state?.active);
+    if (!hasActiveButton) {
+      return;
+    }
+
+    const nextComps = components.map(c => {
+      if (c.type === 'push_button' && c.state?.active) {
+        return {
+          ...c,
+          state: {
+            ...c.state,
+            active: false,
+          },
+        };
+      }
+      return c;
+    });
+
+    setComponents(nextComps);
+    if (simulatorRef.current) {
+      simulatorRef.current.updateCircuit(nextComps, wires);
+    }
+  };
+
   // Clear Canvas
   const handleClearCanvas = () => {
     setComponents([]);
     setWires([]);
     setSelectedId(null);
+    setIsWireSelected(false);
+    setPendingComponentType(null);
     pushHistory([], []);
   };
 
@@ -257,9 +324,7 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#e8ebf0] font-sans antialiased text-slate-800">
-      
-      {/* 1. Header Toolbar Controls */}
+    <div className="flex h-screen flex-col overflow-hidden bg-[#c8ccd2] font-sans text-slate-800 antialiased">
       <Toolbar
         isSimulating={isSimulating}
         onToggleSimulation={handleToggleSimulation}
@@ -279,44 +344,36 @@ export const App: React.FC = () => {
         onRedo={handleRedo}
       />
 
-      {/* View Tabs switcher (Circuit Designer vs. IoT Dashboard) */}
-      <div className="flex items-center space-x-1 px-4 py-1.5 bg-slate-100 border-b border-slate-200 text-xs font-semibold select-none">
+      <div className="flex items-center gap-1 border-b border-[#aeb4bc] bg-[#dfe3e8] px-3 py-1 text-xs font-semibold">
         <button
+          type="button"
           onClick={() => setViewMode('circuit')}
-          className={`flex items-center space-x-1 px-3 py-1 rounded-md transition ${
-            viewMode === 'circuit'
-              ? 'bg-white shadow text-blue-600'
-              : 'text-slate-600 hover:text-slate-800'
+          className={`rounded-md px-3 py-1 transition ${
+            viewMode === 'circuit' ? 'bg-white text-[#00788a] shadow-sm' : 'text-slate-600 hover:text-slate-800'
           }`}
         >
-          <Cpu className="w-3.5 h-3.5" />
-          <span>Circuit Designer</span>
+          Circuit
         </button>
         <button
+          type="button"
           onClick={() => setViewMode('dashboard')}
-          className={`flex items-center space-x-1 px-3 py-1 rounded-md transition ${
-            viewMode === 'dashboard'
-              ? 'bg-white shadow text-blue-600'
-              : 'text-slate-600 hover:text-slate-800'
+          className={`rounded-md px-3 py-1 transition ${
+            viewMode === 'dashboard' ? 'bg-white text-[#00788a] shadow-sm' : 'text-slate-600 hover:text-slate-800'
           }`}
         >
-          <LayoutGrid className="w-3.5 h-3.5" />
-          <span>Blynk IoT Dashboard</span>
+          IoT Dashboard
         </button>
       </div>
 
-      {/* 2. Main content container */}
-      <div className="flex-1 flex overflow-hidden">
-        
-        {/* Components Library Sidebar on the Left (Only show in 'circuit' mode) */}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {viewMode === 'circuit' && (
           <ComponentSidebar
-            onAddComponent={handleAddComponent}
+            onPickComponent={handleQueueComponent}
+            pendingComponentType={pendingComponentType}
             isSimulating={isSimulating}
           />
         )}
 
-        {/* View Workspace: Switch between Circuit canvas and Dashboard grid */}
         {viewMode === 'circuit' ? (
           <Canvas
             components={components}
@@ -324,7 +381,7 @@ export const App: React.FC = () => {
             selectedId={selectedId}
             onSelect={(id, isWire = false) => {
               setSelectedId(id);
-              setIsWireSelected(isWire);
+              setIsWireSelected(Boolean(id) && isWire);
             }}
             onUpdateComponents={setComponents}
             onUpdateWires={setWires}
@@ -336,11 +393,17 @@ export const App: React.FC = () => {
             servoAngles={servoAngles}
             motorSpeeds={motorSpeeds}
             lcdLines={lcdLines}
+            digitalPins={digitalPins}
             validationErrors={validationErrors}
             onValueChange={handleSensorValueChange}
+            onComponentStateChange={handleComponentStateChange}
+            onReleaseMomentaryInputs={handleReleaseMomentaryInputs}
             zoom={zoom}
             setZoom={setZoom}
             pushHistory={pushHistory}
+            pendingComponentType={pendingComponentType}
+            onPlaceComponent={handlePlaceComponent}
+            onCancelPlacement={() => setPendingComponentType(null)}
           />
         ) : (
           <DashboardPanel
@@ -358,7 +421,6 @@ export const App: React.FC = () => {
           />
         )}
 
-        {/* 3. Arduino Editor Code Panel on the Right */}
         {isCodeOpen && viewMode === 'circuit' && (
           <CodePanel
             code={code}
@@ -366,17 +428,11 @@ export const App: React.FC = () => {
             serialLogs={serialLogs}
             onClearSerial={() => setSerialLogs([])}
             onLoadTemplate={loadTemplatePreset}
+            onClose={() => setIsCodeOpen(false)}
             isSimulating={isSimulating}
           />
         )}
       </div>
-
-      {/* Center instructions dialog */}
-      {viewMode === 'circuit' && (
-        <div className="absolute bottom-4 left-80 bg-white/90 backdrop-blur-sm border border-slate-200 px-4 py-2 rounded-xl text-[10.5px] text-slate-500 shadow-sm max-w-md select-none leading-relaxed pointer-events-none z-20 font-medium font-sans">
-          🖱 Scroll to zoom &bull; Left-click drag background to pan &bull; Drag components to align &bull; Click pin to pin to connect wires &bull; Press <span className="font-bold text-slate-800 font-mono bg-slate-100 px-1 border rounded">R</span> to rotate selected.
-        </div>
-      )}
     </div>
   );
 };
