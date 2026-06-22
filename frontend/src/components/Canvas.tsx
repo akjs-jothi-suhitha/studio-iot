@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ComponentInstance, ComponentType, Wire } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
 import { findNearestPin, getPinAbsoluteCoords } from '../utils/pinCoords';
-import { FritzingComponent } from './FritzingComponent';
+import { RealisticComponent } from './RealisticComponent';
 
 interface CanvasProps {
   components: ComponentInstance[];
@@ -34,7 +34,7 @@ interface CanvasProps {
 
 const GRID_SIZE = 10;
 const WIRE_SAG = 48;
-const PIN_SNAP_DISTANCE = 16;
+const PIN_SNAP_DISTANCE = 20;
 
 export { getPinAbsoluteCoords };
 
@@ -407,16 +407,11 @@ export const Canvas: React.FC<CanvasProps> = ({
               pointerEvents="none"
             />
           )}
-          <FritzingComponent
+          <RealisticComponent
             instance={component}
-            isSelected={isSelected}
-            isWiring={isWiring}
-            wiringHoverPinId={
-              hoveredPin?.compId === component.id ? hoveredPin.pinId : null
-            }
+            onboardLed13={onboardLed13}
             ledState={ledStates[component.id]}
             ledWarning={ledWarnings[component.id]}
-            onboardLed13={onboardLed13}
             buzzerState={buzzerStates[component.id]}
             servoAngle={servoAngles[component.id]}
             motorSpeed={motorSpeeds[component.id]}
@@ -494,7 +489,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           {renderActiveWire()}
           {pendingPreview && (
             <g opacity="0.45" pointerEvents="none">
-              <FritzingComponent
+              <RealisticComponent
                 instance={{
                   id: 'preview',
                   type: pendingPreview.type,
@@ -503,7 +498,6 @@ export const Canvas: React.FC<CanvasProps> = ({
                   y: pendingPreview.y,
                   rotation: 0,
                 }}
-                isSelected={false}
                 isSimulating={false}
               />
             </g>

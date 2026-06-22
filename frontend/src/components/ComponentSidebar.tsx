@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
-import { getFritzingAsset } from '../utils/fritzingAssets';
 import { ComponentType } from '../types';
 
 interface ComponentSidebarProps {
@@ -41,6 +40,27 @@ const COMPONENT_ORDER: ComponentType[] = [
   'battery_aa',
   'battery_coin',
 ];
+
+const COMPONENT_ICONS: Partial<Record<ComponentType, string>> = {
+  arduino_uno: '🔵',
+  breadboard_small: '⬜',
+  led: '💡',
+  resistor: '〰️',
+  push_button: '🔘',
+  potentiometer: '🎚️',
+  buzzer: '🔊',
+  gas_sensor: '☁️',
+  ldr: '☀️',
+  dht11: '🌡️',
+  ultrasonic: '📡',
+  lcd_16x2: '🖥️',
+  seven_segment: '8️⃣',
+  servo: '⚙️',
+  dc_motor: '🌀',
+  battery_9v: '🔋',
+  battery_aa: '🔋',
+  battery_coin: '🔋',
+};
 
 export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
   onPickComponent,
@@ -117,13 +137,8 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
                 isPending ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-slate-50'
               } ${isSimulating ? 'cursor-not-allowed opacity-50' : ''}`}
             >
-              <div className="flex h-12 w-14 shrink-0 items-center justify-center rounded border border-slate-200 bg-slate-50 p-1">
-                <img
-                  src={getFritzingAsset(def.type)}
-                  alt={def.name}
-                  className="max-h-full max-w-full object-contain"
-                  draggable={false}
-                />
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-lg">
+                {COMPONENT_ICONS[def.type] || '📦'}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-xs font-semibold text-slate-800">{def.name}</div>
