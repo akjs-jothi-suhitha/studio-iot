@@ -87,9 +87,9 @@ void loop() {
     ],
     wires: [
       // Connections for Gas Sensor
-      { id: 'wg_vcc', fromComponentId: 'uno_1', fromPinId: 'pin_5v', toComponentId: 'gas_1', toPinId: 'pin_a1', color: '#ef4444' },
-      { id: 'wg_gnd', fromComponentId: 'uno_1', fromPinId: 'pin_gnd2', toComponentId: 'gas_1', toPinId: 'pin_b1', color: '#1f2937' },
-      { id: 'wg_sig', fromComponentId: 'uno_1', fromPinId: 'pin_a0', toComponentId: 'gas_1', toPinId: 'pin_b2', color: '#f59e0b' },
+      { id: 'wg_vcc', fromComponentId: 'uno_1', fromPinId: 'pin_5v', toComponentId: 'gas_1', toPinId: 'pin_vcc', color: '#ef4444' },
+      { id: 'wg_gnd', fromComponentId: 'uno_1', fromPinId: 'pin_gnd2', toComponentId: 'gas_1', toPinId: 'pin_gnd', color: '#1f2937' },
+      { id: 'wg_sig', fromComponentId: 'uno_1', fromPinId: 'pin_a0', toComponentId: 'gas_1', toPinId: 'pin_a1', color: '#f59e0b' },
 
       // Connections for Buzzer
       { id: 'wb_gnd', fromComponentId: 'uno_1', fromPinId: 'pin_gnd3', toComponentId: 'buzzer_1', toPinId: 'negative', color: '#1f2937' },

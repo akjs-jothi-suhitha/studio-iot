@@ -7,8 +7,8 @@ A Tinkercad-style web app for building Arduino circuits, wiring components pin-t
 ## Features
 
 - **Visual circuit builder** — Arduino Uno, breadboard, LEDs, sensors, motors, and more
-- **Pin-accurate wiring** — click near any connector to snap wires (no visible pin circles)
-- **Built-in SVG components** — hand-drawn parts with connectors aligned to the graphics
+- **Tinkercad-style parts** — [Wokwi Elements](https://github.com/wokwi/wokwi-elements) (MIT) for Arduino, LED, sensors, LCD, servo, and more
+- **Pin-accurate wiring** — click near any connector to snap wires (no visible pin circles; wire ends show junction dots)
 - **Live simulation** — LEDs, buzzers, motors, LCD, push buttons, onboard Uno LED on pin 13
 - **Arduino code editor** — Monaco editor with blink, gas alarm, and LDR templates
 - **Code & circuit modes** — pure circuit physics or transpiled Arduino C++
@@ -93,4 +93,4 @@ studio-iot/
 
 ## Tech stack
 
-React 19 · TypeScript · Vite 8 · Tailwind CSS 4 · Monaco Editor · Express · Prisma
+React 19 · TypeScript · Vite 8 · Tailwind CSS 4 · Monaco Editor · [@wokwi/elements](https://www.npmjs.com/package/@wokwi/elements) · Express · Prisma

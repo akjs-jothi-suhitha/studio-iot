@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Cable } from 'lucide-react';
 import { ComponentInstance, ComponentType, Wire } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
 import { findNearestPin, getPinAbsoluteCoords } from '../utils/pinCoords';
@@ -12,6 +13,7 @@ interface CanvasProps {
   onUpdateComponents: (comps: ComponentInstance[]) => void;
   onUpdateWires: (wires: Wire[]) => void;
   activeWireColor: string;
+  onChangeWireColor: (color: string) => void;
   isSimulating: boolean;
   ledStates: Record<string, boolean>;
   ledWarnings: Record<string, string>;
@@ -34,7 +36,18 @@ interface CanvasProps {
 
 const GRID_SIZE = 10;
 const WIRE_SAG = 48;
-const PIN_SNAP_DISTANCE = 20;
+const PIN_SNAP_DISTANCE = 24;
+const WIRE_COLORS = [
+  { name: 'Red', hex: '#ef4444' },
+  { name: 'Black', hex: '#1f2937' },
+  { name: 'Orange', hex: '#f97316' },
+  { name: 'Yellow', hex: '#eab308' },
+  { name: 'Green', hex: '#10b981' },
+  { name: 'Blue', hex: '#3b82f6' },
+  { name: 'Purple', hex: '#8b5cf6' },
+  { name: 'Brown', hex: '#78350f' },
+  { name: 'White', hex: '#f8fafc' },
+];
 
 export { getPinAbsoluteCoords };
 
@@ -53,6 +66,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onUpdateComponents,
   onUpdateWires,
   activeWireColor,
+  onChangeWireColor,
   isSimulating,
   ledStates,
   ledWarnings,
@@ -361,6 +375,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         <path d={path} fill="none" stroke="transparent" strokeWidth="16" className="cursor-pointer" />
         {isSelected && <path d={path} fill="none" stroke="#2563eb" strokeWidth="8" opacity="0.35" />}
         <path d={path} fill="none" stroke={wire.color} strokeWidth="4" strokeLinecap="round" />
+        <circle cx={fromCoords.x} cy={fromCoords.y} r="3.5" fill={wire.color} stroke="#fff" strokeWidth="1" pointerEvents="none" />
+        <circle cx={toCoords.x} cy={toCoords.y} r="3.5" fill={wire.color} stroke="#fff" strokeWidth="1" pointerEvents="none" />
       </g>
     );
   };
@@ -427,14 +443,14 @@ export const Canvas: React.FC<CanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 overflow-hidden bg-[#c8ccd2] select-none"
+      className="relative flex-1 overflow-hidden bg-slate-200 select-none"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={finishInteraction}
       style={{ cursor: pendingComponentType ? 'copy' : isPanning ? 'grabbing' : isWiring ? 'crosshair' : 'default' }}
     >
-      <div className="absolute inset-x-0 top-0 z-20 flex h-11 items-center justify-between border-b border-[#aeb4bc] bg-[#dfe3e8] px-4 text-xs text-slate-700">
+      <div className="absolute inset-x-0 top-0 z-20 flex h-11 items-center justify-between border-b border-slate-200 bg-white/95 px-4 text-xs text-slate-700 shadow-sm backdrop-blur">
         <div className="flex items-center gap-2 font-semibold">
           <span className="uppercase tracking-widest text-slate-500">Workplane</span>
           {pendingComponentType && (
@@ -451,10 +467,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         <div className="flex items-center gap-2">
           <button onClick={() => setZoom(Math.max(20, zoom - 10))} className="rounded bg-white px-2 py-1 shadow-sm">−</button>
           <span className="min-w-12 text-center font-mono">{zoom}%</span>
-          <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="rounded bg-white px-2 py-1 shadow-sm">+</button>
+          <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="rounded border border-slate-200 bg-white px-2 py-1 shadow-sm">+</button>
           <button
             onClick={() => { setZoom(100); setPanX(40); setPanY(30); }}
-            className="rounded bg-white px-2 py-1 shadow-sm"
+            className="rounded border border-slate-200 bg-white px-2 py-1 shadow-sm"
           >
             Reset
           </button>
@@ -471,10 +487,36 @@ export const Canvas: React.FC<CanvasProps> = ({
         </div>
       )}
 
+      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs font-semibold text-slate-700 shadow-lg backdrop-blur">
+        <Cable className="h-4 w-4 text-cyan-700" />
+        <span className="hidden text-slate-500 sm:inline">Wire</span>
+        <div className="flex items-center gap-1">
+          {WIRE_COLORS.map((color) => (
+            <button
+              key={color.hex}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setHoveredPin(null);
+                setActiveWiringSrc(null);
+                onChangeWireColor(color.hex);
+              }}
+              className={`h-6 w-6 rounded-full border transition ${
+                activeWireColor === color.hex
+                  ? 'border-slate-900 ring-2 ring-cyan-200'
+                  : 'border-slate-300 hover:scale-105'
+              }`}
+              style={{ backgroundColor: color.hex }}
+              title={color.name}
+            />
+          ))}
+        </div>
+      </div>
+
       <div
         className="absolute inset-0 mt-11"
         style={{
-          backgroundColor: '#c8ccd2',
+          backgroundColor: '#dbe3ea',
           backgroundImage:
             'linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px)',
           backgroundSize: `${GRID_SIZE * (zoom / 100)}px ${GRID_SIZE * (zoom / 100)}px`,

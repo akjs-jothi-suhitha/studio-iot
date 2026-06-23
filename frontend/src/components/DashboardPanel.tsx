@@ -1,6 +1,17 @@
 import React, { useState } from 'react';
-import { LayoutGrid, Gauge as GaugeIcon, ToggleLeft, Activity, Radio, Plus, Trash2, Sliders } from 'lucide-react';
-import { DashboardWidget } from '../types';
+import {
+  LayoutGrid,
+  Gauge as GaugeIcon,
+  ToggleLeft,
+  Activity,
+  Radio,
+  Plus,
+  Trash2,
+  Sliders,
+  Terminal,
+  MousePointerClick,
+} from 'lucide-react';
+import { ComponentInstance, DashboardWidget } from '../types';
 
 interface DashboardPanelProps {
   widgets: DashboardWidget[];
@@ -8,7 +19,7 @@ interface DashboardPanelProps {
   digitalPins: Record<string, number>;
   analogPins: Record<string, number>;
   serialLogs: string[];
-  components: any[];
+  components: ComponentInstance[];
   isSimulating: boolean;
   onWidgetInteraction: (pin: string, value: number) => void;
 }
@@ -24,6 +35,11 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
   onWidgetInteraction,
 }) => {
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const activeDigitalPins = Object.values(digitalPins).filter((value) => value > 0).length;
+  const analogValues = Object.values(analogPins);
+  const analogAverage = analogValues.length
+    ? Math.round(analogValues.reduce((sum, value) => sum + value, 0) / analogValues.length)
+    : 0;
 
   // Read current value for a given pin/indicator
   const getBindingValue = (pin: string): string | number => {
@@ -70,6 +86,9 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
     } else if (type === 'terminal') {
       title = 'Console Output';
       pin = 'serial';
+    } else if (type === 'progress') {
+      title = 'Analog Progress';
+      pin = 'A0';
     }
 
     const newWidget: DashboardWidget = {
@@ -152,8 +171,50 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                 <Sliders className="w-4 h-4 text-purple-500" />
                 <span>Value Card</span>
               </button>
+              <button
+                onClick={() => handleAddWidget('progress')}
+                className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center space-x-2 text-slate-700"
+              >
+                <Sliders className="w-4 h-4 text-cyan-500" />
+                <span>Progress Bar</span>
+              </button>
+              <button
+                onClick={() => handleAddWidget('button')}
+                className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center space-x-2 text-slate-700"
+              >
+                <MousePointerClick className="w-4 h-4 text-slate-500" />
+                <span>Push Button</span>
+              </button>
+              <button
+                onClick={() => handleAddWidget('terminal')}
+                className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center space-x-2 text-slate-700"
+              >
+                <Terminal className="w-4 h-4 text-slate-700" />
+                <span>Terminal</span>
+              </button>
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</div>
+          <div className={`mt-1 text-sm font-bold ${isSimulating ? 'text-emerald-600' : 'text-slate-600'}`}>
+            {isSimulating ? 'Live simulation' : 'Standby'}
+          </div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Hardware</div>
+          <div className="mt-1 text-sm font-bold text-slate-800">{components.length} components</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Digital High</div>
+          <div className="mt-1 text-sm font-bold text-slate-800">{activeDigitalPins} pins</div>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Analog Avg</div>
+          <div className="mt-1 text-sm font-bold text-slate-800">{analogAverage}</div>
         </div>
       </div>
 
@@ -241,11 +302,41 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                   </div>
                 )}
 
+                {widget.type === 'button' && (
+                  <button
+                    onMouseDown={() => onWidgetInteraction(widget.pin, 1)}
+                    onMouseUp={() => onWidgetInteraction(widget.pin, 0)}
+                    onMouseLeave={() => onWidgetInteraction(widget.pin, 0)}
+                    className={`h-14 w-14 rounded-full border-4 text-[10px] font-black shadow-inner transition ${
+                      rawVal === 1
+                        ? 'border-blue-200 bg-blue-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    PUSH
+                  </button>
+                )}
+
                 {widget.type === 'value_card' && (
                   <div className="text-center">
                     <span className="text-3xl font-extrabold font-mono text-slate-800">
                       {rawVal}
                     </span>
+                  </div>
+                )}
+
+                {widget.type === 'progress' && (
+                  <div className="w-full px-2">
+                    <div className="mb-2 flex items-end justify-between">
+                      <span className="text-2xl font-extrabold font-mono text-slate-800">{rawVal}</span>
+                      <span className="text-[10px] font-bold text-slate-400">/ 1023</span>
+                    </div>
+                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-cyan-500 transition-all"
+                        style={{ width: `${Math.max(0, Math.min(100, (Number(rawVal) / 1023) * 100))}%` }}
+                      />
+                    </div>
                   </div>
                 )}
 

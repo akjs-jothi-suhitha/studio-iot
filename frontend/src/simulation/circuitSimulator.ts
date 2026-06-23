@@ -47,6 +47,7 @@ class WebAudioBuzzer {
 }
 
 const buzzerAudio = new WebAudioBuzzer();
+const PIN_KEY_SEPARATOR = '::';
 
 export class CircuitSimulator {
   private components: ComponentInstance[] = [];
@@ -83,6 +84,12 @@ export class CircuitSimulator {
     if (this.simulating) {
       this.evaluateElectricalNets();
     }
+  }
+
+  setDigitalPin(pin: string, value: number) {
+    this.state.digitalPins[pin] = value;
+    this.evaluateElectricalNets();
+    this.onStateUpdate({ ...this.state });
   }
 
   start(code: string, mode: 'circuit' | 'code' = 'circuit') {
@@ -151,7 +158,11 @@ export class CircuitSimulator {
       adj[b].push(a);
     };
 
-    const getPinKey = (compId: string, pinId: string) => `${compId}_${pinId}`;
+    const getPinKey = (compId: string, pinId: string) => `${compId}${PIN_KEY_SEPARATOR}${pinId}`;
+    const parsePinKey = (pinKey: string) => {
+      const [compId, pinId] = pinKey.split(PIN_KEY_SEPARATOR);
+      return { compId, pinId };
+    };
 
     for (const w of this.wires) {
       addConnection(getPinKey(w.fromComponentId, w.fromPinId), getPinKey(w.toComponentId, w.toPinId));
@@ -215,12 +226,12 @@ export class CircuitSimulator {
       }
     }
 
-    return { nets, getPinKey };
+    return { nets, getPinKey, parsePinKey };
   }
 
   private validateCircuit(): string[] {
     const errors: string[] = [];
-    const { nets, getPinKey } = this.buildNets();
+    const { nets, getPinKey, parsePinKey } = this.buildNets();
 
     // 1. Short Circuit Detection (Power to GND directly)
     // 2. Open Circuit / Floating pins
@@ -230,7 +241,7 @@ export class CircuitSimulator {
       let hasGnd = false;
       
       for (const pinKey of net) {
-        const [compId, pinId] = pinKey.split('_');
+        const { compId, pinId } = parsePinKey(pinKey);
         const comp = this.components.find(c => c.id === compId);
         if (!comp) continue;
 
@@ -289,7 +300,7 @@ export class CircuitSimulator {
   private evaluateElectricalNets() {
     if (!this.simulating) return;
 
-    const { nets, getPinKey } = this.buildNets();
+    const { nets, getPinKey, parsePinKey } = this.buildNets();
     const netState = new Map<string, { voltage: number; type: 'power' | 'gnd' | 'floating' | 'digital' }>();
 
     for (const net of nets) {
@@ -299,7 +310,7 @@ export class CircuitSimulator {
       let activeDigitalValue = 0;
 
       for (const pinKey of net) {
-        const [compId, pinId] = pinKey.split('_');
+        const { compId, pinId } = parsePinKey(pinKey);
         const comp = this.components.find(c => c.id === compId);
         if (!comp) continue;
 

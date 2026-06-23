@@ -104,7 +104,7 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
           placeholder="Search..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-500"
+          className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-cyan-500"
         />
         <div className="mt-2 flex flex-wrap gap-1">
           {(Object.keys(CATEGORY_LABELS) as CategoryKey[]).map((key) => (
@@ -112,8 +112,8 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
               key={key}
               type="button"
               onClick={() => setCategory(key)}
-              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
-                category === key
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                  category === key
                   ? 'bg-[#0097a7] text-white'
                   : 'bg-white text-slate-600 hover:bg-slate-100'
               }`}

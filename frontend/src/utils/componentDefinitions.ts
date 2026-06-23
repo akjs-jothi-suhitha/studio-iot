@@ -1,4 +1,5 @@
 import { ComponentType, Pin } from '../types';
+import { WOKWI_PART_MAPS } from './wokwiPinMaps';
 
 export interface ComponentDef {
   type: ComponentType;
@@ -382,3 +383,13 @@ export const COMPONENT_DEFINITIONS: Record<ComponentType, ComponentDef> = {
     ],
   },
 };
+
+for (const [type, map] of Object.entries(WOKWI_PART_MAPS)) {
+  const key = type as ComponentType;
+  const def = COMPONENT_DEFINITIONS[key];
+  if (def && map) {
+    def.width = map.width;
+    def.height = map.height;
+    def.pins = map.pins;
+  }
+}

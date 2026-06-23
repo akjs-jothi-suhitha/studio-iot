@@ -317,23 +317,21 @@ export const App: React.FC = () => {
         ...prev,
         [pin]: value,
       }));
-      // In simulator state:
-      (simulatorRef.current as any).state.digitalPins[pin] = value;
-      (simulatorRef.current as any).evaluateElectricalNets();
+      simulatorRef.current.setDigitalPin(pin, value);
     }
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#c8ccd2] font-sans text-slate-800 antialiased">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 font-sans text-slate-800 antialiased">
       <Toolbar
+        viewMode={viewMode}
+        onChangeViewMode={setViewMode}
         isSimulating={isSimulating}
         onToggleSimulation={handleToggleSimulation}
         simulationMode={simulationMode}
         onChangeSimulationMode={setSimulationMode}
         isCodeOpen={isCodeOpen}
         onToggleCode={() => setIsCodeOpen(!isCodeOpen)}
-        activeWireColor={activeWireColor}
-        onChangeWireColor={setActiveWireColor}
         onClearCanvas={handleClearCanvas}
         onRotateSelected={handleRotateSelected}
         onDeleteSelected={handleDeleteSelected}
@@ -343,27 +341,6 @@ export const App: React.FC = () => {
         onUndo={handleUndo}
         onRedo={handleRedo}
       />
-
-      <div className="flex items-center gap-1 border-b border-[#aeb4bc] bg-[#dfe3e8] px-3 py-1 text-xs font-semibold">
-        <button
-          type="button"
-          onClick={() => setViewMode('circuit')}
-          className={`rounded-md px-3 py-1 transition ${
-            viewMode === 'circuit' ? 'bg-white text-[#00788a] shadow-sm' : 'text-slate-600 hover:text-slate-800'
-          }`}
-        >
-          Circuit
-        </button>
-        <button
-          type="button"
-          onClick={() => setViewMode('dashboard')}
-          className={`rounded-md px-3 py-1 transition ${
-            viewMode === 'dashboard' ? 'bg-white text-[#00788a] shadow-sm' : 'text-slate-600 hover:text-slate-800'
-          }`}
-        >
-          IoT Dashboard
-        </button>
-      </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {viewMode === 'circuit' && (
@@ -386,6 +363,7 @@ export const App: React.FC = () => {
             onUpdateComponents={setComponents}
             onUpdateWires={setWires}
             activeWireColor={activeWireColor}
+            onChangeWireColor={setActiveWireColor}
             isSimulating={isSimulating}
             ledStates={ledStates}
             ledWarnings={ledWarnings}
