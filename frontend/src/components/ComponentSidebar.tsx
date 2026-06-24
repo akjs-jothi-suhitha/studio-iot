@@ -131,7 +131,10 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
             <button
               key={def.type}
               type="button"
-              onClick={() => onPickComponent(def.type)}
+              draggable={!isSimulating}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/json', JSON.stringify({ type: def.type }));
+              }}
               disabled={isSimulating}
               className={`flex w-full items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-left transition ${
                 isPending ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-slate-50'
@@ -152,9 +155,7 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
       <div className="border-t border-[#aeb4bc] bg-[#dfe3e8] px-3 py-2 text-[10px] text-slate-600">
         {isSimulating
           ? 'Stop simulation to edit the circuit.'
-          : pendingComponentType
-            ? 'Click workplane to place • Esc to cancel'
-            : 'Select a part, then click the workplane'}
+          : 'Drag a part to the workplane to place it'}
       </div>
     </aside>
   );

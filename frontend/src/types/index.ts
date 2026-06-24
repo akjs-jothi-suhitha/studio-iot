@@ -55,6 +55,7 @@ export interface Wire {
   toComponentId: string;
   toPinId: string;
   color: string;
+  wireType?: 'hookup' | 'alligator' | 'retractable';
 }
 
 export interface ProjectState {

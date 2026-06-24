@@ -4,6 +4,7 @@ import { ComponentSidebar } from './components/ComponentSidebar';
 import { Canvas } from './components/Canvas';
 import { CodePanel } from './components/CodePanel';
 import { DashboardPanel } from './components/DashboardPanel';
+import { PropertiesPanel } from './components/PropertiesPanel';
 import { CODE_PRESETS } from './utils/codePresets';
 import { ComponentType, ComponentInstance, Wire, DashboardWidget, ProjectState } from './types';
 import { CircuitSimulator, SimulationState } from './simulation/circuitSimulator';
@@ -263,6 +264,21 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleUpdateComponent = (id: string, updates: Partial<ComponentInstance>) => {
+    const nextComps = components.map(c => c.id === id ? { ...c, ...updates } : c);
+    setComponents(nextComps);
+    pushHistory(nextComps, wires);
+    if (simulatorRef.current) {
+      simulatorRef.current.updateCircuit(nextComps, wires);
+    }
+  };
+
+  const handleUpdateWire = (id: string, updates: Partial<Wire>) => {
+    const nextWires = wires.map(w => w.id === id ? { ...w, ...updates } : w);
+    setWires(nextWires);
+    pushHistory(components, nextWires);
+  };
+
   const handleReleaseMomentaryInputs = () => {
     const hasActiveButton = components.some(c => c.type === 'push_button' && c.state?.active);
     if (!hasActiveButton) {
@@ -321,6 +337,9 @@ export const App: React.FC = () => {
     }
   };
 
+  const selectedComponent = viewMode === 'circuit' && !isWireSelected ? components.find(c => c.id === selectedId) || null : null;
+  const selectedWire = viewMode === 'circuit' && isWireSelected ? wires.find(w => w.id === selectedId) || null : null;
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-slate-100 font-sans text-slate-800 antialiased">
       <Toolbar
@@ -352,6 +371,7 @@ export const App: React.FC = () => {
         )}
 
         {viewMode === 'circuit' ? (
+          <>
           <Canvas
             components={components}
             wires={wires}
@@ -383,6 +403,14 @@ export const App: React.FC = () => {
             onPlaceComponent={handlePlaceComponent}
             onCancelPlacement={() => setPendingComponentType(null)}
           />
+          <PropertiesPanel
+            selectedComponent={selectedComponent}
+            selectedWire={selectedWire}
+            onUpdateComponent={handleUpdateComponent}
+            onUpdateWire={handleUpdateWire}
+            onDeleteSelected={handleDeleteSelected}
+          />
+        </>
         ) : (
           <DashboardPanel
             widgets={widgets}

@@ -1,5 +1,6 @@
 import { ComponentInstance, Wire } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
+import { getPinAbsoluteCoords } from '../utils/pinCoords';
 
 export interface SimulationState {
   digitalPins: Record<string, number>;
@@ -191,6 +192,27 @@ export class CircuitSimulator {
         }
       }
     }
+
+    const breadboards = this.components.filter(c => c.type === 'breadboard_small');
+    const otherComps = this.components.filter(c => c.type !== 'breadboard_small');
+
+    breadboards.forEach(bb => {
+      const bbDef = COMPONENT_DEFINITIONS[bb.type];
+      otherComps.forEach(comp => {
+        const compDef = COMPONENT_DEFINITIONS[comp.type];
+        if (!compDef) return;
+        compDef.pins.forEach(compPin => {
+          const compPinCoords = getPinAbsoluteCoords(comp, compPin.id);
+          bbDef.pins.forEach(bbPin => {
+            const bbPinCoords = getPinAbsoluteCoords(bb, bbPin.id);
+            const dist = Math.hypot(compPinCoords.x - bbPinCoords.x, compPinCoords.y - bbPinCoords.y);
+            if (dist < 6) { // Snap threshold for direct breadboard connection
+              addConnection(getPinKey(comp.id, compPin.id), getPinKey(bb.id, bbPin.id));
+            }
+          });
+        });
+      });
+    });
 
     const visited = new Set<string>();
     const nets: string[][] = [];
@@ -487,18 +509,25 @@ export class CircuitSimulator {
   private async runArduinoCode(rawCode: string) {
     let jsCode = rawCode;
     
-    jsCode = jsCode.replace(/(?:const\s+)?int\s+(\w+)\s*=/g, 'let $1 =');
-    jsCode = jsCode.replace(/(?:const\s+)?float\s+(\w+)\s*=/g, 'let $1 =');
-    jsCode = jsCode.replace(/(?:const\s+)?bool\s+(\w+)\s*=/g, 'let $1 =');
-    jsCode = jsCode.replace(/(?:const\s+)?boolean\s+(\w+)\s*=/g, 'let $1 =');
-    jsCode = jsCode.replace(/(?:const\s+)?double\s+(\w+)\s*=/g, 'let $1 =');
-    jsCode = jsCode.replace(/(?:const\s+)?char\s+(\w+)\s*=/g, 'let $1 =');
+    // Handle #define directives
+    jsCode = jsCode.replace(/#define\s+(\w+)\s+(.+)/g, 'const $1 = $2;');
+    
+    // Include guards or includes - just strip them
+    jsCode = jsCode.replace(/#include\s+<[^>]+>/g, '');
+    jsCode = jsCode.replace(/#include\s+"[^"]+"/g, '');
+
+    // Variable declarations with assignments
+    jsCode = jsCode.replace(/(?:const\s+)?(?:unsigned\s+)?(?:int|float|bool|boolean|double|char|long|byte|short)\s+(\w+)\s*=/g, 'let $1 =');
+    
+    // Variable declarations without assignments (e.g., int x;)
+    jsCode = jsCode.replace(/(?:const\s+)?(?:unsigned\s+)?(?:int|float|bool|boolean|double|char|long|byte|short)\s+(\w+)\s*;/g, 'let $1;');
 
     jsCode = jsCode.replace(/void\s+setup\s*\(\s*\)/g, 'async function setup()');
     jsCode = jsCode.replace(/void\s+loop\s*\(\s*\)/g, 'async function loop()');
     jsCode = jsCode.replace(/void\s+(\w+)\s*\(/g, 'async function $1(');
 
     jsCode = jsCode.replace(/delay\s*\(\s*([^)]+)\s*\)/g, 'await sleep($1)');
+    jsCode = jsCode.replace(/delayMicroseconds\s*\(\s*([^)]+)\s*\)/g, 'await sleep($1 / 1000)');
 
     const self = this;
     const sleep = (ms: number) => new Promise(resolve => {

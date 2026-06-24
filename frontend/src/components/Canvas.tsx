@@ -259,6 +259,23 @@ export const Canvas: React.FC<CanvasProps> = ({
     setZoom(Math.max(20, Math.min(200, event.deltaY > 0 ? zoom - 5 : zoom + 5)));
   };
 
+  const handleDragOver = (event: React.DragEvent) => {
+    event.preventDefault();
+  };
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    if (isSimulating) return;
+    try {
+      const data = JSON.parse(event.dataTransfer.getData('application/json'));
+      if (data.type) {
+        const canvasCoords = clientToCanvasCoords(event.clientX, event.clientY);
+        const def = COMPONENT_DEFINITIONS[data.type as ComponentType];
+        onPlaceComponent(data.type, snapToGrid(canvasCoords.x - def.width / 2), snapToGrid(canvasCoords.y - def.height / 2));
+      }
+    } catch (err) {}
+  };
+
   const handleMouseDown = (event: React.MouseEvent) => {
     const canvasCoords = clientToCanvasCoords(event.clientX, event.clientY);
     setMousePos(canvasCoords);
@@ -369,14 +386,24 @@ export const Canvas: React.FC<CanvasProps> = ({
     const toCoords = getPinAbsoluteCoords(toComp, wire.toPinId);
     const path = buildBezierPath(fromCoords, toCoords);
     const isSelected = selectedId === wire.id;
+    const isAlligator = wire.wireType === 'alligator';
+    const isRetractable = wire.wireType === 'retractable';
 
     return (
       <g key={wire.id} onClick={(event) => { event.stopPropagation(); onSelect(wire.id, true); }}>
         <path d={path} fill="none" stroke="transparent" strokeWidth="16" className="cursor-pointer" />
         {isSelected && <path d={path} fill="none" stroke="#2563eb" strokeWidth="8" opacity="0.35" />}
-        <path d={path} fill="none" stroke={wire.color} strokeWidth="4" strokeLinecap="round" />
-        <circle cx={fromCoords.x} cy={fromCoords.y} r="3.5" fill={wire.color} stroke="#fff" strokeWidth="1" pointerEvents="none" />
-        <circle cx={toCoords.x} cy={toCoords.y} r="3.5" fill={wire.color} stroke="#fff" strokeWidth="1" pointerEvents="none" />
+        <path
+          d={path}
+          fill="none"
+          stroke={wire.color}
+          strokeWidth={isAlligator ? "6" : isRetractable ? "2" : "4"}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={isRetractable ? "5, 5" : "none"}
+        />
+        <circle cx={fromCoords.x} cy={fromCoords.y} r={isAlligator ? "5" : "3.5"} fill={wire.color} stroke="#fff" strokeWidth="1" pointerEvents="none" />
+        <circle cx={toCoords.x} cy={toCoords.y} r={isAlligator ? "5" : "3.5"} fill={wire.color} stroke="#fff" strokeWidth="1" pointerEvents="none" />
       </g>
     );
   };
@@ -448,6 +475,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={finishInteraction}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
       style={{ cursor: pendingComponentType ? 'copy' : isPanning ? 'grabbing' : isWiring ? 'crosshair' : 'default' }}
     >
       <div className="absolute inset-x-0 top-0 z-20 flex h-11 items-center justify-between border-b border-slate-200 bg-white/95 px-4 text-xs text-slate-700 shadow-sm backdrop-blur">
@@ -486,32 +515,6 @@ export const Canvas: React.FC<CanvasProps> = ({
           ))}
         </div>
       )}
-
-      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-xs font-semibold text-slate-700 shadow-lg backdrop-blur">
-        <Cable className="h-4 w-4 text-cyan-700" />
-        <span className="hidden text-slate-500 sm:inline">Wire</span>
-        <div className="flex items-center gap-1">
-          {WIRE_COLORS.map((color) => (
-            <button
-              key={color.hex}
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setHoveredPin(null);
-                setActiveWiringSrc(null);
-                onChangeWireColor(color.hex);
-              }}
-              className={`h-6 w-6 rounded-full border transition ${
-                activeWireColor === color.hex
-                  ? 'border-slate-900 ring-2 ring-cyan-200'
-                  : 'border-slate-300 hover:scale-105'
-              }`}
-              style={{ backgroundColor: color.hex }}
-              title={color.name}
-            />
-          ))}
-        </div>
-      </div>
 
       <div
         className="absolute inset-0 mt-11"
