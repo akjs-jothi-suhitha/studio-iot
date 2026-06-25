@@ -1,5 +1,6 @@
 export type ComponentType =
   | 'arduino_uno'
+  | 'esp32'
   | 'breadboard_small'
   | 'resistor'
   | 'led'
@@ -35,16 +36,18 @@ export interface ComponentInstance {
   rotation: number; // 0, 90, 180, 270
   color?: string; // For LEDs, wires, etc.
   value?: string | number; // e.g. "220" for resistor value in ohms, or thresholds
-  state?: {
+    state?: {
     glowing?: boolean;
     active?: boolean;
     textLine1?: string;
     textLine2?: string;
     speed?: number;
     angle?: number;
-    sensorValue?: number; // Current value of a sensor (e.g. gas level)
-    displayVal?: string; // Seven-segment code
-    potentiometerPos?: number; // 0 to 1
+    sensorValue?: number;
+    tempC?: number;
+    humidity?: number;
+    displayVal?: string;
+    potentiometerPos?: number;
   };
 }
 
@@ -71,16 +74,36 @@ export interface ProjectState {
   boardType?: BoardType;
 }
 
+/** Blynk-style virtual datastream (V0, V1, …) */
+export interface BlynkDatastream {
+  id: string;
+  virtualPin: string; // e.g. V0
+  name: string;
+  dataType: 'integer' | 'double' | 'string';
+  min?: number;
+  max?: number;
+}
+
 export interface DashboardWidget {
   id: string;
-  type: 'gauge' | 'chart' | 'button' | 'switch' | 'led' | 'terminal' | 'value_card' | 'progress';
+  type: 'gauge' | 'chart' | 'button' | 'switch' | 'led' | 'terminal' | 'value_card' | 'progress' | 'slider';
   title: string;
-  pin: string; // Connected Arduino pin/variable name
+  /** Legacy physical pin — prefer virtualPin */
+  pin: string;
+  /** Blynk virtual pin e.g. V0 */
+  virtualPin?: string;
   x: number;
   y: number;
   w: number;
   h: number;
   value?: string | number;
+}
+
+export interface BlynkDeviceConfig {
+  templateId: string;
+  authToken: string;
+  deviceName: string;
+  datastreams: BlynkDatastream[];
 }
 
 export interface CodeTemplate {

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { ComponentInstance } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
+import { getPinHitRadius } from '../utils/pinCoords';
+import { getSelectionBoundsForInstance } from '../utils/componentBounds';
 import { WOKWI_PART_MAPS } from '../utils/wokwiPinMaps';
 import { SvgComponent } from './SvgComponent';
 
@@ -68,6 +70,7 @@ const buildWokwiProps = (
         text: line1 + line2,
         backlight: isSimulating,
         pins: 'full',
+        background: 'green',
       };
     }
     case 'gas_sensor':
@@ -164,22 +167,30 @@ export const CircuitComponent: React.FC<CircuitComponentProps> = (componentProps
   }
 
   const wokwiProps = buildWokwiProps(instance, componentProps);
+  const pinRadius = getPinHitRadius(instance.type, def.pins.length);
+  const bounds = getSelectionBoundsForInstance(instance);
 
   return (
-    <g transform={`translate(${instance.x}, ${instance.y}) rotate(${instance.rotation || 0}, ${width / 2}, ${height / 2})`}>
-      {/* Hit area for select & drag */}
+    <g transform={`translate(${instance.x}, ${instance.y}) rotate(${instance.rotation || 0}, ${bounds.cx}, ${bounds.cy})`}>
       <rect
-        x={0}
-        y={0}
-        width={width}
-        height={height}
+        x={bounds.ox}
+        y={bounds.oy}
+        width={bounds.width}
+        height={bounds.height}
         fill="transparent"
         pointerEvents="all"
         style={{ cursor: 'move' }}
       />
 
-      <foreignObject x={0} y={0} width={width} height={height} pointerEvents="none">
-        <div style={{ width, height, overflow: 'visible', pointerEvents: 'none' }}>
+      <foreignObject
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        overflow="visible"
+        pointerEvents="none"
+      >
+        <div xmlns="http://www.w3.org/1999/xhtml" style={{ width, height, overflow: 'visible', pointerEvents: 'none' }}>
           <WokwiElementHost
             tag={wokwi.wokwiTag}
             width={width}
@@ -192,20 +203,51 @@ export const CircuitComponent: React.FC<CircuitComponentProps> = (componentProps
         </div>
       </foreignObject>
 
+      {instance.type === 'gas_sensor' && componentProps.isSimulating && (
+        <g pointerEvents="none">
+          {(instance.state?.sensorValue ?? 0) > 150 && (
+            <>
+              {[0, 1, 2, 3, 4].map((i) => (
+                <circle
+                  key={i}
+                  cx={width * 0.5 + (i - 2) * 12}
+                  cy={-10 - i * 8}
+                  r={4 + (instance.state?.sensorValue ?? 0) / 200}
+                  fill="#94a3b8"
+                  opacity={0.15 + (instance.state?.sensorValue ?? 0) / 2000}
+                >
+                  <animate attributeName="cy" values={`${-5};${-35 - i * 10};${-5}`} dur={`${1.2 + i * 0.2}s`} repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.05;0.35;0.05" dur={`${1.2 + i * 0.2}s`} repeatCount="indefinite" />
+                </circle>
+              ))}
+            </>
+          )}
+        </g>
+      )}
+
       {def.pins.map((pin) => (
-        <circle
-          key={pin.id}
-          cx={pin.x}
-          cy={pin.y}
-          r={10}
-          fill="transparent"
-          stroke="transparent"
-          data-pin-id={pin.id}
-          data-component-id={instance.id}
-          style={{ cursor: 'crosshair', pointerEvents: 'all' }}
-        >
-          <title>{pin.name}</title>
-        </circle>
+        <g key={pin.id}>
+          <circle
+            cx={pin.x}
+            cy={pin.y}
+            r={pinRadius}
+            fill="transparent"
+            stroke="transparent"
+            data-pin-id={pin.id}
+            data-component-id={instance.id}
+            style={{ cursor: 'crosshair', pointerEvents: 'all' }}
+          >
+            <title>{pin.name}</title>
+          </circle>
+          <circle
+            cx={pin.x}
+            cy={pin.y}
+            r={Math.max(2, pinRadius - 3)}
+            fill={pin.type === 'power' ? '#ef4444' : pin.type === 'ground' ? '#1f2937' : pin.type === 'analog' ? '#8b5cf6' : '#10b981'}
+            opacity={0.35}
+            pointerEvents="none"
+          />
+        </g>
       ))}
     </g>
   );

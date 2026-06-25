@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Cable } from 'lucide-react';
 import { ComponentInstance, ComponentType, Wire } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
-import { findNearestPin, getPinAbsoluteCoords, collectPinHits } from '../utils/pinCoords';
-import { buildWirePath, getPinHighlightColor, WIRE_COLORS } from '../utils/wireUtils';
+import { findNearestPin, getPinAbsoluteCoords, collectPinHits, findPinDefinition } from '../utils/pinCoords';
+import { buildWirePath, getPinHighlightColor, suggestWireColor, WIRE_COLORS, wireLaneIndex } from '../utils/wireUtils';
+import { getSelectionBoundsForInstance } from '../utils/componentBounds';
 import { RealisticComponent } from './RealisticComponent';
 import { SimulationSensorPanel } from './SimulationSensorPanel';
 
@@ -15,7 +15,8 @@ interface CanvasProps {
   onUpdateComponents: (comps: ComponentInstance[]) => void;
   onUpdateWires: (wires: Wire[]) => void;
   activeWireColor: string;
-  onChangeWireColor: (color: string) => void;
+  onChangeWireColor: (color: string, manual?: boolean) => void;
+  onUpdateWire?: (id: string, updates: Partial<Wire>) => void;
   isSimulating: boolean;
   ledStates: Record<string, boolean>;
   ledWarnings: Record<string, string>;
@@ -34,10 +35,12 @@ interface CanvasProps {
   pendingComponentType: ComponentType | null;
   onPlaceComponent: (type: ComponentType, x: number, y: number) => void;
   onCancelPlacement: () => void;
+  wireMode: boolean;
+  manualWireColor: boolean;
 }
 
 const GRID_SIZE = 10;
-const PIN_SNAP_DISTANCE = 24;
+const PIN_SNAP_DISTANCE = 18;
 
 export { getPinAbsoluteCoords };
 
@@ -52,6 +55,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   onUpdateWires,
   activeWireColor,
   onChangeWireColor,
+  onUpdateWire,
   isSimulating,
   ledStates,
   ledWarnings,
@@ -70,6 +74,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   pendingComponentType,
   onPlaceComponent,
   onCancelPlacement,
+  wireMode,
+  manualWireColor,
 }) => {
   const [panX, setPanX] = useState(40);
   const [panY, setPanY] = useState(30);
@@ -85,6 +91,8 @@ export const Canvas: React.FC<CanvasProps> = ({
   const draggedSnapshotRef = useRef<ComponentInstance[] | null>(null);
 
   const isWiring = Boolean(activeWiringSrc);
+  const selectedWire = selectedId ? wires.find((w) => w.id === selectedId) : null;
+  const showWireColors = !isSimulating && (wireMode || isWiring || Boolean(selectedWire));
 
   const pendingPreview = useMemo(() => {
     if (!pendingComponentType) {
@@ -163,6 +171,14 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (wireExists(from, to)) {
       return;
     }
+
+    const fromComp = components.find((c) => c.id === from.compId);
+    const toComp = components.find((c) => c.id === to.compId);
+    const fromPin = fromComp ? findPinDefinition(fromComp, from.pinId) : undefined;
+    const toPin = toComp ? findPinDefinition(toComp, to.pinId) : undefined;
+    const autoColor = suggestWireColor(fromPin?.type, toPin?.type);
+    const wireColor = manualWireColor ? activeWireColor : autoColor;
+
     const nextWires = [
       ...wires,
       {
@@ -171,10 +187,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         fromPinId: from.pinId,
         toComponentId: to.compId,
         toPinId: to.pinId,
-        color: activeWireColor,
+        color: wireColor,
       },
     ];
     onUpdateWires(nextWires);
+    if (!manualWireColor) onChangeWireColor(autoColor);
     pushHistory(components, nextWires);
   };
 
@@ -272,7 +289,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     const canvasCoords = clientToCanvasCoords(event.clientX, event.clientY);
     setMousePos(canvasCoords);
 
-    if (!pendingComponentType) {
+    if (!pendingComponentType && (wireMode || activeWiringSrc)) {
       const pinHit = resolvePinFromEvent(event, canvasCoords);
       if (pinHit) {
         event.stopPropagation();
@@ -283,6 +300,9 @@ export const Canvas: React.FC<CanvasProps> = ({
             pinHit.pinId,
           );
           setMousePos(start);
+          const srcComp = components.find((c) => c.id === pinHit.compId);
+          const srcPin = srcComp ? findPinDefinition(srcComp, pinHit.pinId) : undefined;
+          if (!manualWireColor) onChangeWireColor(suggestWireColor(srcPin?.type));
         } else {
           connectPins(activeWiringSrc, pinHit);
           setActiveWiringSrc(null);
@@ -293,7 +313,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     const componentElement = (event.target as Element).closest('[data-component-instance-id]');
-    if (componentElement && !pendingComponentType && !activeWiringSrc) {
+    if (componentElement && !pendingComponentType && !activeWiringSrc && !wireMode) {
       event.stopPropagation();
       const compId = componentElement.getAttribute('data-component-instance-id');
       if (!compId) {
@@ -377,16 +397,16 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     const fromCoords = getPinAbsoluteCoords(fromComp, wire.fromPinId);
     const toCoords = getPinAbsoluteCoords(toComp, wire.toPinId);
-    const path = buildWirePath(fromCoords, toCoords);
+    const path = buildWirePath(fromCoords, toCoords, wireLaneIndex(wire.id));
     const isSelected = selectedId === wire.id;
     const isAlligator = wire.wireType === 'alligator';
     const isRetractable = wire.wireType === 'retractable';
-    const strokeW = isAlligator ? 5 : isRetractable ? 2.5 : 3.5;
+    const strokeW = isAlligator ? 5 : isRetractable ? 2.5 : 3;
 
     return (
       <g key={wire.id} onClick={(event) => { event.stopPropagation(); onSelect(wire.id, true); }}>
         <path d={path} fill="none" stroke="transparent" strokeWidth="18" className="cursor-pointer" />
-        {isSelected && <path d={path} fill="none" stroke="#2563eb" strokeWidth={strokeW + 6} opacity="0.25" strokeLinecap="round" />}
+        {isSelected && <path d={path} fill="none" stroke="#2563eb" strokeWidth={strokeW + 5} opacity="0.22" strokeLinecap="round" />}
         <path
           d={path}
           fill="none"
@@ -395,7 +415,8 @@ export const Canvas: React.FC<CanvasProps> = ({
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeDasharray={isRetractable ? '6 4' : 'none'}
-          opacity={0.92}
+          opacity={0.95}
+          filter={isSelected ? 'drop-shadow(0 1px 2px rgba(0,0,0,0.15))' : undefined}
         />
         <circle cx={fromCoords.x} cy={fromCoords.y} r={isAlligator ? 4.5 : 3} fill={wire.color} stroke="#fff" strokeWidth="1.2" pointerEvents="none" />
         <circle cx={toCoords.x} cy={toCoords.y} r={isAlligator ? 4.5 : 3} fill={wire.color} stroke="#fff" strokeWidth="1.2" pointerEvents="none" />
@@ -454,8 +475,9 @@ export const Canvas: React.FC<CanvasProps> = ({
           hoveredPin.pinId,
         )
       : mousePos;
-    const path = buildWirePath(startCoords, endCoords);
-    const color = hoveredPin ? '#f59e0b' : activeWireColor;
+    const path = buildWirePath(startCoords, endCoords, wireLaneIndex('preview'));
+    const previewPin = findPinDefinition(source, activeWiringSrc.pinId);
+    const color = hoveredPin ? '#f59e0b' : (manualWireColor ? activeWireColor : suggestWireColor(previewPin?.type));
 
     return (
       <path d={path} fill="none" stroke={color} strokeWidth="3.5" strokeDasharray="8 4" opacity="0.85" strokeLinecap="round" />
@@ -464,26 +486,28 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   const renderComponentLayer = () =>
     components.map((component) => {
-      const definition = COMPONENT_DEFINITIONS[component.type];
+      const bounds = getSelectionBoundsForInstance(component);
       const isSelected = selectedId === component.id;
       const onboardLed13 =
         component.type === 'arduino_uno' &&
         (digitalPins['13'] === 1 || ledStates[component.id] === true);
+      const rotCx = component.x + bounds.cx;
+      const rotCy = component.y + bounds.cy;
 
       return (
         <g key={component.id} data-component-instance-id={component.id}>
           {isSelected && (
             <rect
-              x={component.x - 4}
-              y={component.y - 4}
-              width={definition.width + 8}
-              height={definition.height + 8}
+              x={component.x + bounds.ox - 4}
+              y={component.y + bounds.oy - 4}
+              width={bounds.width + 8}
+              height={bounds.height + 8}
               fill="none"
               stroke="#2563eb"
               strokeWidth="2"
               strokeDasharray="5 4"
               rx="4"
-              transform={`rotate(${component.rotation || 0}, ${component.x + definition.width / 2}, ${component.y + definition.height / 2})`}
+              transform={`rotate(${component.rotation || 0}, ${rotCx}, ${rotCy})`}
               pointerEvents="none"
             />
           )}
@@ -514,7 +538,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseUp={finishInteraction}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      style={{ cursor: isSimulating ? 'default' : pendingComponentType ? 'copy' : isPanning ? 'grabbing' : isWiring ? 'crosshair' : 'default' }}
+      style={{ cursor: isSimulating ? 'default' : pendingComponentType ? 'copy' : wireMode || isWiring ? 'crosshair' : isPanning ? 'grabbing' : 'default' }}
     >
       <div className="absolute inset-x-0 top-0 z-20 flex h-11 items-center justify-between border-b border-slate-200 bg-white/95 px-4 text-xs text-slate-700 shadow-sm backdrop-blur">
         <div className="flex items-center gap-2 font-semibold">
@@ -527,6 +551,11 @@ export const Canvas: React.FC<CanvasProps> = ({
               Place {COMPONENT_DEFINITIONS[pendingComponentType].name}
             </span>
           )}
+          {wireMode && !isSimulating && !isWiring && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-900">
+              Wire mode — click two pins
+            </span>
+          )}
           {isWiring && (
             <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-sky-800">
               Click destination pin to connect
@@ -534,21 +563,28 @@ export const Canvas: React.FC<CanvasProps> = ({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {!isSimulating && (
-            <div className="flex items-center gap-1.5">
-              <Cable className="h-3.5 w-3.5 text-slate-400" />
-              {WIRE_COLORS.slice(0, 7).map((c) => (
-                <button
-                  key={c.hex}
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onChangeWireColor(c.hex); }}
-                  className={`h-5 w-5 rounded-full border-2 transition ${
-                    activeWireColor === c.hex ? 'border-slate-800 scale-110' : 'border-white shadow-sm hover:scale-105'
-                  }`}
-                  style={{ backgroundColor: c.hex }}
-                  title={c.name}
-                />
-              ))}
+          {showWireColors && (
+            <div className="mr-2 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1">
+              <span className="text-[10px] font-semibold uppercase text-slate-400">Wire</span>
+              {WIRE_COLORS.map((color) => {
+                const active = selectedWire ? selectedWire.color === color.hex : activeWireColor === color.hex;
+                return (
+                  <button
+                    key={color.hex}
+                    type="button"
+                    title={color.name}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChangeWireColor(color.hex, true);
+                      if (selectedWire && onUpdateWire) {
+                        onUpdateWire(selectedWire.id, { color: color.hex });
+                      }
+                    }}
+                    className={`h-5 w-5 rounded-full border-2 transition ${active ? 'border-slate-800 scale-110' : 'border-slate-200 hover:scale-105'}`}
+                    style={{ backgroundColor: color.hex }}
+                  />
+                );
+              })}
             </div>
           )}
           <button onClick={() => setZoom(Math.max(20, zoom - 10))} className="rounded bg-white px-2 py-1 shadow-sm">−</button>
@@ -584,10 +620,10 @@ export const Canvas: React.FC<CanvasProps> = ({
         }}
       />
 
-      <svg className="relative z-10 h-full w-full">
+      <svg className="relative z-10 h-full w-full" style={{ overflow: 'visible' }}>
         <g transform={`translate(${panX}, ${panY + 44}) scale(${zoom / 100})`}>
-          {renderComponentLayer()}
           {wires.map(renderWire)}
+          {renderComponentLayer()}
           {renderPinHighlights()}
           {renderActiveWire()}
           {pendingPreview && (
@@ -611,6 +647,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       <SimulationSensorPanel
         components={components}
         onValueChange={onValueChange}
+        onComponentStateChange={onComponentStateChange}
         isSimulating={isSimulating}
       />
     </div>

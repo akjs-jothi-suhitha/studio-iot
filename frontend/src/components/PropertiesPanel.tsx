@@ -54,8 +54,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               />
             </div>
 
-            <div className="rounded-md bg-slate-50 px-2.5 py-1.5 text-[10px] text-slate-500">
-              {COMPONENT_DEFINITIONS[selectedComponent.type]?.description}
+            <div className="rounded-md bg-slate-50 px-2.5 py-1.5 text-[10px] text-slate-500 capitalize">
+              {selectedComponent.type.replace(/_/g, ' ')}
             </div>
 
             {selectedComponent.type === 'resistor' && (

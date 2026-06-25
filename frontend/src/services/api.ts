@@ -88,4 +88,7 @@ export const api = {
   listBoards: () => request<BoardInfo[]>('/api/boards'),
 
   listPorts: () => request<PortInfo[]>('/api/ports'),
+
+  cliStatus: () =>
+    request<{ installed: boolean; path?: string; version?: string; message?: string }>('/api/cli-status'),
 };

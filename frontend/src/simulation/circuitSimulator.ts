@@ -556,28 +556,55 @@ export class CircuitSimulator {
 
     const digitalRead = (pin: any): number => {
       const pinStr = String(pin);
-      const activeButton = self.components.find(c => c.type === 'push_button' && c.state?.active);
+      if (self.state.digitalPins[pinStr] !== undefined) {
+        return self.state.digitalPins[pinStr];
+      }
+      const ultrasonic = self.components.find((c) => c.type === 'ultrasonic');
+      if (ultrasonic && pinStr === '7') {
+        const dist = ultrasonic.state?.sensorValue ?? 50;
+        return dist < 30 ? 1 : 0;
+      }
+      const activeButton = self.components.find((c) => c.type === 'push_button' && c.state?.active);
       if (activeButton) {
         return 1;
       }
-      return self.state.digitalPins[pinStr] || 0;
+      return 0;
     };
 
     const analogRead = (pin: any): number => {
       const pinStr = String(pin);
       if (pinStr.toUpperCase() === 'A0') {
-        const gas = self.components.find(c => c.type === 'gas_sensor');
+        const gas = self.components.find((c) => c.type === 'gas_sensor');
         return gas?.state?.sensorValue ?? 150;
       }
       if (pinStr.toUpperCase() === 'A1') {
-        const ldr = self.components.find(c => c.type === 'ldr');
+        const ldr = self.components.find((c) => c.type === 'ldr');
         return ldr?.state?.sensorValue ?? 500;
       }
       if (pinStr.toUpperCase() === 'A2' || pinStr === 'A2') {
-        const pot = self.components.find(c => c.type === 'potentiometer');
+        const pot = self.components.find((c) => c.type === 'potentiometer');
         return pot?.state?.sensorValue ?? 0;
       }
+      const dht = self.components.find((c) => c.type === 'dht11');
+      if (dht) {
+        const hum = dht.state?.humidity ?? 50;
+        return Math.round((hum / 100) * 1023);
+      }
+      const ultrasonic = self.components.find((c) => c.type === 'ultrasonic');
+      if (ultrasonic) {
+        const dist = ultrasonic.state?.sensorValue ?? 50;
+        return Math.round(Math.max(0, Math.min(1023, (400 - dist) * 2.5)));
+      }
       return self.state.analogPins[pinStr] || 0;
+    };
+
+    const pulseIn = (pin: any, _state: number, _timeout?: number): number => {
+      const ultrasonic = self.components.find((c) => c.type === 'ultrasonic');
+      if (ultrasonic) {
+        const distCm = ultrasonic.state?.sensorValue ?? 50;
+        return Math.round(distCm * 58);
+      }
+      return 0;
     };
 
     const tone = (pin: any, freq: number) => {
@@ -604,18 +631,40 @@ export class CircuitSimulator {
       }
     };
 
+    let lcdLine1 = '';
+    let lcdLine2 = '';
+    let lcdCursorCol = 0;
+    let lcdCursorRow = 0;
+
     const lcd = {
       begin: (cols: number, rows: number) => {
         self.logSerial(`[LCD] Initialized screen size ${cols}x${rows}`);
+        lcdLine1 = '';
+        lcdLine2 = '';
+        lcdCursorCol = 0;
+        lcdCursorRow = 0;
         self.updateLcd('', '');
       },
       clear: () => {
+        lcdLine1 = '';
+        lcdLine2 = '';
+        lcdCursorCol = 0;
+        lcdCursorRow = 0;
         self.updateLcd('', '');
       },
-      setCursor: (_col: number, _row: number) => {},
+      setCursor: (col: number, row: number) => {
+        lcdCursorCol = Math.max(0, Math.min(15, col));
+        lcdCursorRow = Math.max(0, Math.min(1, row));
+      },
       print: (text: string) => {
-        self.updateLcd(String(text), '');
-      }
+        const chunk = String(text);
+        let line = lcdCursorRow === 0 ? lcdLine1 : lcdLine2;
+        line = (line.slice(0, lcdCursorCol) + chunk).slice(0, 16);
+        if (lcdCursorRow === 0) lcdLine1 = line;
+        else lcdLine2 = line;
+        lcdCursorCol = Math.min(16, lcdCursorCol + chunk.length);
+        self.updateLcd(lcdLine1, lcdLine2);
+      },
     };
 
     class ServoMock {
@@ -668,7 +717,7 @@ export class CircuitSimulator {
     try {
       const sandboxFunc = new Function(
         'sleep', 'pinMode', 'digitalWrite', 'analogWrite', 'digitalRead', 'analogRead',
-        'tone', 'noTone', 'Serial', 'lcd', 'Servo', 'map', 'constrain',
+        'tone', 'noTone', 'Serial', 'lcd', 'Servo', 'map', 'constrain', 'pulseIn',
         'HIGH', 'LOW', 'OUTPUT', 'INPUT', 'INPUT_PULLUP',
         'A0', 'A1', 'A2', 'A3', 'A4', 'A5',
         `
@@ -682,7 +731,7 @@ export class CircuitSimulator {
 
       const resolvedFunctions = sandboxFunc(
         sleep, pinMode, digitalWrite, analogWrite, digitalRead, analogRead,
-        tone, noTone, Serial, lcd, Servo, map, constrain,
+        tone, noTone, Serial, lcd, Servo, map, constrain, pulseIn,
         HIGH, LOW, OUTPUT, INPUT, INPUT_PULLUP,
         A0, A1, A2, A3, A4, A5
       );

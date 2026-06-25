@@ -1,6 +1,10 @@
 import React from 'react';
 import { ComponentInstance, Pin } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
+import { getPinHitRadius } from '../utils/pinCoords';
+import { getSelectionBoundsForInstance } from '../utils/componentBounds';
+import { BreadboardSvg } from './BreadboardSvg';
+import { SevenSegmentSvg } from './SevenSegmentSvg';
 
 interface RealisticComponentProps {
   instance: ComponentInstance;
@@ -35,6 +39,7 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
 
   const width = def.width;
   const height = def.height;
+  const bounds = getSelectionBoundsForInstance(instance);
 
   // Render component based on type
   const renderSVG = () => {
@@ -91,61 +96,17 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
         );
 
       case 'breadboard_small':
+        return <BreadboardSvg width={width} height={height} />;
+
+      case 'esp32':
         return (
           <g>
-            {/* Breadboard Plate */}
-            <rect width={width} height={height} rx="4" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="2" />
-            
-            {/* Center Splitter Trench */}
-            <rect x="10" y="76" width={width - 20} height={10} fill="#e2e8f0" />
-            
-            {/* Labels columns */}
-            {Array.from({ length: 6 }).map((_, idx) => {
-              const col = idx * 5 + 1;
-              const x = 20 + idx * 5 * 9.5;
-              return (
-                <g key={col} fontSize="6" fill="#94a3b8" fontFamily="monospace" textAnchor="middle">
-                  <text x={x} y={28}>{col}</text>
-                  <text x={x} y={135}>{col}</text>
-                </g>
-              );
-            })}
-
-            {/* Labels rows */}
-            {['e', 'd', 'c', 'b', 'a'].map((r, i) => (
-              <text key={r} x="8" y={35.5 + i * 8.5} fontSize="6.5" fill="#94a3b8" fontFamily="monospace">{r}</text>
-            ))}
-            {['f', 'g', 'h', 'i', 'j'].map((r, i) => (
-              <text key={r} x="8" y={94.5 + i * 8.5} fontSize="6.5" fill="#94a3b8" fontFamily="monospace">{r}</text>
-            ))}
-
-            {/* Power Rails Indicator lines */}
-            {/* Top plus/minus line */}
-            <line x1="20" y1="6" x2={width - 20} y2="6" stroke="#3b82f6" strokeWidth="1" />
-            <text x="12" y="12" fill="#3b82f6" fontSize="9" fontWeight="bold">-</text>
-            <line x1="20" y1="25" x2={width - 20} y2="25" stroke="#ef4444" strokeWidth="1" />
-            <text x="12" y="22" fill="#ef4444" fontSize="9" fontWeight="bold">+</text>
-
-            {/* Bottom plus/minus line */}
-            <line x1="20" y1="155" x2={width - 20} y2="155" stroke="#ef4444" strokeWidth="1" />
-            <text x="12" y="152" fill="#ef4444" fontSize="9" fontWeight="bold">+</text>
-            <line x1="20" y1="137" x2={width - 20} y2="137" stroke="#3b82f6" strokeWidth="1" />
-            <text x="12" y="142" fill="#3b82f6" fontSize="9" fontWeight="bold">-</text>
-
-            {/* Render realistic square holes for all pins */}
-            {def.pins.map((p) => (
-              <rect
-                key={`hole_vis_${p.id}`}
-                x={p.x - 3.5}
-                y={p.y - 3.5}
-                width="7"
-                height="7"
-                rx="1"
-                fill="#334155"
-                stroke="#0f172a"
-                strokeWidth="0.5"
-              />
-            ))}
+            <rect width={width} height={height} rx="4" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+            <rect x="60" y="20" width="80" height="80" rx="2" fill="#334155" stroke="#475569" strokeWidth="1" />
+            <rect x="68" y="28" width="64" height="64" rx="1" fill="#0f172a" />
+            <text x="100" y="58" fill="#94a3b8" fontSize="8" fontWeight="bold" textAnchor="middle">ESP32</text>
+            <circle cx="100" cy="40" r="3" fill="#22c55e" opacity="0.8" />
+            <rect x="88" y="102" width="24" height="10" rx="1" fill="#475569" stroke="#64748b" />
           </g>
         );
 
@@ -478,54 +439,13 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
         );
 
       case 'seven_segment':
-        const displayVal = instance.state?.displayVal || '0';
-        
-        // Helper to check segment state based on standard common-cathode character hex representations
-        // Standard digit mapping: '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
-        const digitSegments: Record<string, Record<string, boolean>> = {
-          '0': { a: true, b: true, c: true, d: true, e: true, f: true, g: false },
-          '1': { a: false, b: true, c: true, d: false, e: false, f: false, g: false },
-          '2': { a: true, b: true, c: false, d: true, e: true, f: false, g: true },
-          '3': { a: true, b: true, c: true, d: true, e: false, f: false, g: true },
-          '4': { a: false, b: true, c: true, d: false, e: false, f: true, g: true },
-          '5': { a: true, b: false, c: true, d: true, e: false, f: true, g: true },
-          '6': { a: true, b: false, c: true, d: true, e: true, f: true, g: true },
-          '7': { a: true, b: true, c: true, d: false, e: false, f: false, g: false },
-          '8': { a: true, b: true, c: true, d: true, e: true, f: true, g: true },
-          '9': { a: true, b: true, c: true, d: true, e: false, f: true, g: true },
-          ' ': { a: false, b: false, c: false, d: false, e: false, f: false, g: false }
-        };
-        const currentSegs = digitSegments[displayVal] || digitSegments[' '];
-
-        const segColor = (lit: boolean) => lit ? '#ef4444' : '#374151';
-        const segGlow = (lit: boolean) => lit ? 'drop-shadow(0px 0px 3px #ef4444)' : 'none';
-
         return (
-          <g>
-            {/* Casing package */}
-            <rect width={width} height={height} rx="2" fill="#111827" stroke="#1f2937" strokeWidth="2.5" />
-
-            {/* Inner display bezel */}
-            <rect x="5" y="10" width="30" height="40" rx="1" fill="#1e293b" />
-
-            {/* Segment A */}
-            <rect x="10" y="12" width="20" height="3.5" rx="1" fill={segColor(currentSegs.a)} style={{ filter: segGlow(currentSegs.a) }} />
-            {/* Segment B */}
-            <rect x="27.5" y="14" width="3.5" height="15" rx="1" fill={segColor(currentSegs.b)} style={{ filter: segGlow(currentSegs.b) }} />
-            {/* Segment C */}
-            <rect x="27.5" y="31" width="3.5" height="15" rx="1" fill={segColor(currentSegs.c)} style={{ filter: segGlow(currentSegs.c) }} />
-            {/* Segment D */}
-            <rect x="10" y="44.5" width="20" height="3.5" rx="1" fill={segColor(currentSegs.d)} style={{ filter: segGlow(currentSegs.d) }} />
-            {/* Segment E */}
-            <rect x="9" y="31" width="3.5" height="15" rx="1" fill={segColor(currentSegs.e)} style={{ filter: segGlow(currentSegs.e) }} />
-            {/* Segment F */}
-            <rect x="9" y="14" width="3.5" height="15" rx="1" fill={segColor(currentSegs.f)} style={{ filter: segGlow(currentSegs.f) }} />
-            {/* Segment G */}
-            <rect x="10" y="28.25" width="20" height="3.5" rx="1" fill={segColor(currentSegs.g)} style={{ filter: segGlow(currentSegs.g) }} />
-
-            {/* Decimal Point */}
-            <circle cx="32" cy="46" r="2" fill={segColor(false)} />
-          </g>
+          <SevenSegmentSvg
+            width={width}
+            height={height}
+            value={instance.state?.displayVal || '8'}
+            glowing={instance.state?.glowing ?? isSimulating}
+          />
         );
 
       case 'battery_9v':
@@ -601,37 +521,47 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
   };
 
   return (
-    <g transform={`translate(${instance.x}, ${instance.y}) rotate(${instance.rotation || 0}, ${width / 2}, ${height / 2})`}>
+    <g transform={`translate(${instance.x}, ${instance.y}) rotate(${instance.rotation || 0}, ${bounds.cx}, ${bounds.cy})`}>
       {renderSVG()}
 
-      {/* Select & drag hit area */}
       <rect
-        x={0}
-        y={0}
-        width={width}
-        height={height}
+        x={bounds.ox}
+        y={bounds.oy}
+        width={bounds.width}
+        height={bounds.height}
         fill="transparent"
         pointerEvents="all"
         style={{ cursor: 'move' }}
       />
 
-      {def.pins.map((pin: Pin) => (
-        <circle
-          key={pin.id}
-          cx={pin.x}
-          cy={pin.y}
-          r="9"
-          fill="transparent"
-          stroke="transparent"
-          className="hover:fill-blue-400 hover:opacity-50 transition-colors duration-150"
-          pointerEvents="all"
-          data-pin-id={pin.id}
-          data-component-id={instance.id}
-          style={{ cursor: 'crosshair' }}
-        >
-          <title>{pin.name}</title>
-        </circle>
-      ))}
+      {def.pins.map((pin: Pin) => {
+        const pinRadius = getPinHitRadius(instance.type, def.pins.length);
+        return (
+          <g key={pin.id}>
+            <circle
+              cx={pin.x}
+              cy={pin.y}
+              r={pinRadius}
+              fill="transparent"
+              stroke="transparent"
+              pointerEvents="all"
+              data-pin-id={pin.id}
+              data-component-id={instance.id}
+              style={{ cursor: 'crosshair' }}
+            >
+              <title>{pin.name}</title>
+            </circle>
+            <circle
+              cx={pin.x}
+              cy={pin.y}
+              r={Math.max(2, pinRadius - 3)}
+              fill={pin.type === 'power' ? '#ef4444' : pin.type === 'ground' ? '#1f2937' : pin.type === 'analog' ? '#8b5cf6' : '#10b981'}
+              opacity={0.35}
+              pointerEvents="none"
+            />
+          </g>
+        );
+      })}
     </g>
   );
 };

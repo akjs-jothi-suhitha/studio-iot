@@ -13,6 +13,32 @@ import crypto from 'crypto';
 
 const execAsync = promisify(exec);
 
+async function resolveArduinoCli(): Promise<string | null> {
+  const candidates = [
+    'arduino-cli',
+    path.join(process.env.LOCALAPPDATA || '', 'Arduino CLI', 'arduino-cli.exe'),
+    path.join(process.env.ProgramFiles || '', 'Arduino CLI', 'arduino-cli.exe'),
+  ];
+  for (const cli of candidates) {
+    try {
+      await execAsync(`"${cli}" version`);
+      return cli;
+    } catch {
+      /* try next */
+    }
+  }
+  return null;
+}
+
+let cachedCliPath: string | null | undefined;
+
+async function getArduinoCli(): Promise<string | null> {
+  if (cachedCliPath === undefined) {
+    cachedCliPath = await resolveArduinoCli();
+  }
+  return cachedCliPath;
+}
+
 // Initialize Express
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -236,8 +262,15 @@ app.post('/api/upload', async (req, res) => {
     await fs.mkdir(sketchDir, { recursive: true });
     await fs.writeFile(sketchPath, codeText);
     
-    // Upload using arduino-cli
-    const { stdout, stderr } = await execAsync(`arduino-cli upload -p ${port} --fqbn ${fqbn} "${sketchDir}"`);
+    const cli = await getArduinoCli();
+    if (!cli) {
+      return res.status(400).json({
+        success: false,
+        error: 'arduino-cli is not installed or not on PATH. Run backend/scripts/install-arduino-cli.ps1, then restart your terminal and the backend server.',
+      });
+    }
+
+    const { stdout } = await execAsync(`"${cli}" upload -p ${port} --fqbn ${fqbn} "${sketchDir}"`);
     return res.json({
       success: true,
       message: `Sketch uploaded to ${boardType || 'arduino_uno'} on ${port}\n${stdout}`,
@@ -247,6 +280,24 @@ app.post('/api/upload', async (req, res) => {
   } finally {
     // Cleanup
     try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
+  }
+});
+
+// Arduino CLI status check
+app.get('/api/cli-status', async (_req, res) => {
+  const cli = await getArduinoCli();
+  if (!cli) {
+    return res.json({
+      installed: false,
+      message: 'arduino-cli not found. Run backend/scripts/install-arduino-cli.ps1 then restart the terminal and backend server.',
+    });
+  }
+  try {
+    const { stdout } = await execAsync(`"${cli}" version`);
+    return res.json({ installed: true, path: cli, version: stdout.trim() });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return res.json({ installed: false, message });
   }
 });
 
@@ -269,7 +320,15 @@ app.post('/api/compile', async (req, res) => {
     await fs.mkdir(sketchDir, { recursive: true });
     await fs.writeFile(sketchPath, codeText);
 
-    const { stdout, stderr } = await execAsync(`arduino-cli compile --fqbn ${fqbn} "${sketchDir}"`);
+    const cli = await getArduinoCli();
+    if (!cli) {
+      return res.status(400).json({
+        success: false,
+        error: 'arduino-cli is not installed or not on PATH. Run backend/scripts/install-arduino-cli.ps1, then restart your terminal and the backend server.',
+      });
+    }
+
+    const { stdout, stderr } = await execAsync(`"${cli}" compile --fqbn ${fqbn} "${sketchDir}"`);
     
     // Simulate memory stats since parsing arduino-cli output can be complex,
     // or we could parse it if we regex it. For simplicity, just return success.
@@ -311,6 +370,27 @@ wss.on('connection', (ws) => {
     activeSockets.delete(ws);
     console.log('Telemetry WebSocket Client disconnected.');
   });
+});
+
+// Blynk-style virtual pin command (app → hardware)
+app.post('/api/blynk/command', async (req, res) => {
+  const { apiKey, pin, value } = req.body;
+  if (!apiKey || pin === undefined) return res.status(400).json({ error: 'Missing apiKey or pin' });
+
+  let valid = false;
+  if (prisma) {
+    const proj = await prisma.project.findFirst({ where: { apiKey } });
+    if (proj) valid = true;
+  } else {
+    valid = projectsMockDb.some(p => p.apiKey === apiKey);
+  }
+  if (!valid) return res.status(401).json({ error: 'Invalid API Key' });
+
+  const payload = JSON.stringify({ [String(pin).toUpperCase()]: value, timestamp: new Date().toLocaleTimeString() });
+  for (const ws of activeSockets) {
+    if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+  }
+  return res.json({ success: true });
 });
 
 // Real telemetry endpoint for physical ESP32 boards

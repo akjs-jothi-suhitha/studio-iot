@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Play,
   Square,
@@ -12,7 +12,8 @@ import {
   Code2,
   FolderOpen,
   Save,
-  Upload,
+  Pencil,
+  Check,
 } from 'lucide-react';
 import { ViewMode } from '../types';
 
@@ -30,11 +31,10 @@ interface ToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   projectName: string;
+  onProjectNameChange: (name: string) => void;
   onBackToProjects: () => void;
   saveStatus: 'saved' | 'saving' | 'unsaved';
   onManualSave: () => void;
-  onUploadToBoard: () => void;
-  canUpload: boolean;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -51,12 +51,31 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onUndo,
   onRedo,
   projectName,
+  onProjectNameChange,
   onBackToProjects,
   saveStatus,
   onManualSave,
-  onUploadToBoard,
-  canUpload,
-}) => (
+}) => {
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState(projectName);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!editingName) setDraftName(projectName);
+  }, [projectName, editingName]);
+
+  useEffect(() => {
+    if (editingName) nameInputRef.current?.focus();
+  }, [editingName]);
+
+  const commitName = () => {
+    const trimmed = draftName.trim() || 'Untitled Project';
+    onProjectNameChange(trimmed);
+    setDraftName(trimmed);
+    setEditingName(false);
+  };
+
+  return (
   <header className="flex min-h-14 shrink-0 items-center justify-between gap-2 bg-[#0f172a] px-4 text-slate-100 shadow-md select-none">
     <div className="flex min-w-0 items-center gap-4">
       <button
@@ -71,7 +90,37 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <div className="hidden h-8 w-px bg-slate-700 sm:block" />
 
       <div className="min-w-0">
-        <div className="truncate text-sm font-bold text-white">{projectName}</div>
+        {editingName ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              ref={nameInputRef}
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitName();
+                if (e.key === 'Escape') {
+                  setDraftName(projectName);
+                  setEditingName(false);
+                }
+              }}
+              className="w-40 rounded-md border border-cyan-500 bg-slate-900 px-2 py-1 text-sm font-bold text-white outline-none sm:w-52"
+            />
+            <button type="button" onClick={commitName} className="rounded p-1 text-emerald-400 hover:bg-slate-800" title="Save name">
+              <Check className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingName(true)}
+            className="group flex max-w-full items-center gap-1.5 text-left"
+            title="Click to rename project"
+          >
+            <span className="truncate text-sm font-bold text-white">{projectName}</span>
+            <Pencil className="h-3 w-3 shrink-0 text-slate-500 opacity-0 transition group-hover:opacity-100" />
+          </button>
+        )}
         <div className="text-[10px] text-slate-500">
           {saveStatus === 'saving' && 'Saving…'}
           {saveStatus === 'saved' && 'All changes saved'}
@@ -146,18 +195,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         Save
       </button>
 
-      {viewMode === 'arduino' && (
-        <button
-          type="button"
-          onClick={onUploadToBoard}
-          disabled={!canUpload || isSimulating}
-          className="flex items-center gap-1.5 rounded-lg border border-teal-600 bg-teal-600/10 px-3 py-1.5 text-xs font-bold text-teal-400 disabled:opacity-40"
-        >
-          <Upload className="h-3.5 w-3.5" />
-          Upload
-        </button>
-      )}
-
       <button
         type="button"
         onClick={onToggleSimulation}
@@ -181,4 +218,5 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       </button>
     </div>
   </header>
-);
+  );
+};

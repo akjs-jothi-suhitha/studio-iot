@@ -10,25 +10,68 @@ export const WIRE_COLORS = [
   { name: 'White', hex: '#f8fafc' },
 ];
 
-/** Smooth Tinkercad-style wire path with horizontal exit/entry */
+/** Auto-assign wire color from pin role (Tinkercad-style) */
+export const suggestWireColor = (fromType?: string, toType?: string): string => {
+  const types = [fromType, toType].filter(Boolean);
+  if (types.includes('ground')) return '#1f2937';
+  if (types.includes('power')) return '#ef4444';
+  if (types.includes('analog')) return '#8b5cf6';
+  if (types.includes('digital')) return '#10b981';
+  return '#3b82f6';
+};
+
+/** Hash wire id → stable lane index so routes don't stack on one path */
+export const wireLaneIndex = (wireId: string): number => {
+  let hash = 0;
+  for (let i = 0; i < wireId.length; i++) {
+    hash = (hash * 31 + wireId.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+};
+
+/**
+ * Tinkercad-style wire: vertical stub from pin → horizontal bus → vertical to target.
+ * Lane offset separates parallel wires so they don't draw on top of each other.
+ */
 export const buildWirePath = (
   from: { x: number; y: number },
   to: { x: number; y: number },
+  lane = 0,
 ): string => {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const dist = Math.hypot(dx, dy);
 
-  if (dist < 20) {
+  if (dist < 12) {
     return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   }
 
-  const sag = Math.min(60, Math.max(24, dist * 0.15));
-  const exitY = from.y + (dy >= 0 ? sag * 0.4 : -sag * 0.2);
-  const entryY = to.y + (dy >= 0 ? -sag * 0.2 : sag * 0.4);
-  const midX = (from.x + to.x) / 2;
+  const laneOffset = ((lane % 9) - 4) * 11;
+  const stub = 26 + (lane % 5) * 5;
 
-  return `M ${from.x} ${from.y} C ${from.x} ${exitY}, ${midX} ${Math.max(from.y, to.y) + sag}, ${midX} ${Math.max(from.y, to.y) + sag} C ${midX} ${Math.max(from.y, to.y) + sag}, ${to.x} ${entryY}, ${to.x} ${to.y}`;
+  const fromDown = dy >= 0;
+  const y1 = from.y + (fromDown ? stub : -stub);
+  const y2 = to.y + (fromDown ? -stub : stub);
+  const busY = (y1 + y2) / 2 + laneOffset;
+  const midX = (from.x + to.x) / 2 + laneOffset * 0.35;
+
+  if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+    return [
+      `M ${from.x} ${from.y}`,
+      `L ${from.x} ${y1}`,
+      `L ${midX} ${y1}`,
+      `L ${midX} ${y2}`,
+      `L ${to.x} ${y2}`,
+      `L ${to.x} ${to.y}`,
+    ].join(' ');
+  }
+
+  return [
+    `M ${from.x} ${from.y}`,
+    `L ${from.x} ${busY}`,
+    `L ${to.x} ${busY}`,
+    `L ${to.x} ${to.y}`,
+  ].join(' ');
 };
 
 export const getPinHighlightColor = (

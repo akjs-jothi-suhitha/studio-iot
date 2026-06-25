@@ -1,10 +1,15 @@
 import React, { useMemo, useState } from 'react';
+import { Cable, MousePointer2 } from 'lucide-react';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
 import { ComponentType } from '../types';
+
+export type CanvasTool = 'select' | 'wire' | 'place';
 
 interface ComponentSidebarProps {
   onPickComponent: (type: ComponentType) => void;
   pendingComponentType: ComponentType | null;
+  canvasTool: CanvasTool;
+  onSetCanvasTool: (tool: CanvasTool) => void;
   isSimulating: boolean;
 }
 
@@ -22,6 +27,7 @@ const CATEGORY_LABELS: Record<CategoryKey, string> = {
 
 const COMPONENT_ORDER: ComponentType[] = [
   'arduino_uno',
+  'esp32',
   'breadboard_small',
   'led',
   'resistor',
@@ -43,6 +49,7 @@ const COMPONENT_ORDER: ComponentType[] = [
 
 const COMPONENT_ICONS: Partial<Record<ComponentType, string>> = {
   arduino_uno: '🔵',
+  esp32: '📡',
   breadboard_small: '⬜',
   led: '💡',
   resistor: '〰️',
@@ -65,6 +72,8 @@ const COMPONENT_ICONS: Partial<Record<ComponentType, string>> = {
 export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
   onPickComponent,
   pendingComponentType,
+  canvasTool,
+  onSetCanvasTool,
   isSimulating,
 }) => {
   const [category, setCategory] = useState<CategoryKey>('all');
@@ -98,6 +107,43 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
         <div className="text-sm font-semibold text-slate-800">Component library</div>
       </div>
 
+      <div className="border-b border-[#aeb4bc] bg-white px-3 py-2.5">
+        <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Tools</div>
+        <div className="flex gap-1.5">
+          <button
+            type="button"
+            disabled={isSimulating}
+            onClick={() => onSetCanvasTool('select')}
+            className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg border px-2 py-2 text-[10px] font-semibold transition ${
+              canvasTool === 'select' && !pendingComponentType
+                ? 'border-cyan-500 bg-cyan-50 text-cyan-800'
+                : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+            }`}
+          >
+            <MousePointer2 className="h-4 w-4" />
+            Select
+          </button>
+          <button
+            type="button"
+            disabled={isSimulating}
+            onClick={() => onSetCanvasTool('wire')}
+            className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg border px-2 py-2 text-[10px] font-semibold transition ${
+              canvasTool === 'wire'
+                ? 'border-amber-500 bg-amber-50 text-amber-900'
+                : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-slate-300'
+            }`}
+          >
+            <Cable className="h-4 w-4" />
+            Wire
+          </button>
+        </div>
+        {canvasTool === 'wire' && !isSimulating && (
+          <p className="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-900">
+            Click a pin, then click another pin to connect. Pick wire color in the workplane header.
+          </p>
+        )}
+      </div>
+
       <div className="border-b border-[#aeb4bc] px-3 py-2.5">
         <input
           type="text"
@@ -112,8 +158,8 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
               key={key}
               type="button"
               onClick={() => setCategory(key)}
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
-                  category === key
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${
+                category === key
                   ? 'bg-[#0097a7] text-white'
                   : 'bg-white text-slate-600 hover:bg-slate-100'
               }`}
@@ -131,9 +177,17 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
             <button
               key={def.type}
               type="button"
-              draggable={!isSimulating}
-              onClick={() => !isSimulating && onPickComponent(def.type)}
+              draggable={!isSimulating && canvasTool !== 'wire'}
+              onClick={() => {
+                if (isSimulating) return;
+                onSetCanvasTool('place');
+                onPickComponent(def.type);
+              }}
               onDragStart={(e) => {
+                if (canvasTool === 'wire') {
+                  e.preventDefault();
+                  return;
+                }
                 e.dataTransfer.setData('application/json', JSON.stringify({ type: def.type }));
               }}
               disabled={isSimulating}
@@ -152,8 +206,10 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
 
       <div className="border-t border-[#aeb4bc] bg-[#dfe3e8] px-3 py-2 text-[10px] text-slate-600">
         {isSimulating
-          ? 'Stop simulation to edit the circuit.'
-          : 'Click or drag a part to place it on the workplane'}
+          ? 'Simulation running — adjust sensors on the right panel.'
+          : canvasTool === 'wire'
+            ? 'Wire mode: click pins to connect (not components).'
+            : 'Select tool to move parts · Wire tool to connect pins'}
       </div>
     </aside>
   );

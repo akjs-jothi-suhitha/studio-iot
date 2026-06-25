@@ -1,14 +1,18 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Toolbar } from './components/Toolbar';
-import { ComponentSidebar } from './components/ComponentSidebar';
+import { ComponentSidebar, CanvasTool } from './components/ComponentSidebar';
 import { Canvas } from './components/Canvas';
-import { DashboardPanel } from './components/DashboardPanel';
+import { DashboardPanel, DEFAULT_DATASTREAMS } from './components/DashboardPanel';
 import { PropertiesPanel } from './components/PropertiesPanel';
 import { ArduinoIDEPanel } from './components/ArduinoIDEPanel';
+import { CircuitCodePanel } from './components/CircuitCodePanel';
 import { LoginScreen } from './components/LoginScreen';
 import { ProjectsDashboard } from './components/ProjectsDashboard';
 import { CODE_PRESETS } from './utils/codePresets';
-import { ComponentType, ComponentInstance, Wire, DashboardWidget, ProjectState, ViewMode, BoardType } from './types';
+import { COMPONENT_DEFINITIONS } from './utils/componentDefinitions';
+import { parseBoardCodes, serializeBoardCodes, getProgrammableBoardIds, BoardCodeFiles, defaultSketchForBoard } from './utils/boardCodes';
+import { suggestCodeForBoard } from './utils/componentCodeSnippets';
+import { ComponentType, ComponentInstance, Wire, DashboardWidget, ProjectState, ViewMode, BoardType, BlynkDatastream } from './types';
 import { CircuitSimulator, SimulationState } from './simulation/circuitSimulator';
 import { api, ProjectRecord, User } from './services/api';
 
@@ -36,13 +40,16 @@ export const App: React.FC = () => {
   const [wires, setWires] = useState<Wire[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isWireSelected, setIsWireSelected] = useState(false);
-  const [activeWireColor, setActiveWireColor] = useState('#ef4444');
+  const [activeWireColor, setActiveWireColor] = useState('#3b82f6');
+  const [manualWireColor, setManualWireColor] = useState(false);
+  const [canvasTool, setCanvasTool] = useState<CanvasTool>('select');
   const [zoom, setZoom] = useState(100);
   const [pendingComponentType, setPendingComponentType] = useState<ComponentType | null>(null);
 
-  const [code, setCode] = useState('');
+  const [boardCodes, setBoardCodes] = useState<BoardCodeFiles>({ activeBoardId: null, files: {} });
   const [widgets, setWidgets] = useState<DashboardWidget[]>([]);
-  const [componentNotes, setComponentNotes] = useState<Record<string, string>>({});
+  const [datastreams, setDatastreams] = useState<BlynkDatastream[]>([]);
+  const [dashboardSetupStep, setDashboardSetupStep] = useState(0);
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [ledStates, setLedStates] = useState<Record<string, boolean>>({});
@@ -60,7 +67,28 @@ export const App: React.FC = () => {
   const [historyIndex, setHistoryIndex] = useState(-1);
 
   const simulatorRef = useRef<CircuitSimulator | null>(null);
-  const arduinoUploadRef = useRef<(() => void) | null>(null);
+
+  const activeSketchCode = useMemo(() => {
+    const ids = getProgrammableBoardIds(components);
+    const activeId = boardCodes.activeBoardId || ids[0];
+    if (activeId && boardCodes.files[activeId]) return boardCodes.files[activeId];
+    return Object.values(boardCodes.files)[0] || '';
+  }, [boardCodes, components]);
+
+  const handleChangeWireColor = (color: string, manual = false) => {
+    setActiveWireColor(color);
+    if (manual) setManualWireColor(true);
+  };
+
+  const handleSetCanvasTool = (tool: CanvasTool) => {
+    setCanvasTool(tool);
+    if (tool === 'wire') {
+      setPendingComponentType(null);
+      setManualWireColor(false);
+    } else if (tool === 'select') {
+      setPendingComponentType(null);
+    }
+  };
 
   const markDirty = useCallback(() => {
     isDirtyRef.current = true;
@@ -71,9 +99,8 @@ export const App: React.FC = () => {
     const stateSnapshot: ProjectState = {
       components: nextComps,
       wires: nextWires,
-      code,
+      code: serializeBoardCodes(boardCodes),
       widgets,
-      componentNotes,
       boardType,
     };
     const slicedHistory = history.slice(0, historyIndex + 1);
@@ -90,17 +117,16 @@ export const App: React.FC = () => {
       await api.updateProject(projectId, {
         name: projectName,
         boardType,
-        circuitJson: JSON.stringify({ components, wires, componentNotes }),
-        codeText: code,
-        widgetsJson: JSON.stringify(widgets),
-        notesJson: JSON.stringify(componentNotes),
+        circuitJson: JSON.stringify({ components, wires }),
+        codeText: serializeBoardCodes(boardCodes),
+        widgetsJson: JSON.stringify({ widgets, datastreams, setupStep: dashboardSetupStep }),
       });
       isDirtyRef.current = false;
       setSaveStatus('saved');
     } catch {
       setSaveStatus('unsaved');
     }
-  }, [projectId, projectName, boardType, components, wires, code, widgets, componentNotes]);
+  }, [projectId, projectName, boardType, components, wires, boardCodes, widgets, datastreams, dashboardSetupStep]);
 
   useEffect(() => {
     if (!projectId || phase !== 'editor') return;
@@ -112,7 +138,7 @@ export const App: React.FC = () => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [components, wires, code, widgets, componentNotes, boardType, projectName, projectId, phase, saveProject]);
+  }, [components, wires, boardCodes, widgets, datastreams, dashboardSetupStep, boardType, projectName, projectId, phase, saveProject]);
 
   useEffect(() => {
     simulatorRef.current = new CircuitSimulator((state: SimulationState) => {
@@ -141,7 +167,7 @@ export const App: React.FC = () => {
 
     let loadedComponents: ComponentInstance[] = [];
     let loadedWires: Wire[] = [];
-    let loadedNotes: Record<string, string> = {};
+    let parsedCodes: BoardCodeFiles = { activeBoardId: null, files: {} };
 
     try {
       const circuit = JSON.parse(project.circuitJson || '{}');
@@ -150,29 +176,32 @@ export const App: React.FC = () => {
       } else {
         loadedComponents = circuit.components || [];
         loadedWires = circuit.wires || [];
-        loadedNotes = circuit.componentNotes || {};
       }
     } catch {
       loadedComponents = [];
     }
 
-    try {
-      if (Object.keys(loadedNotes).length === 0) {
-        loadedNotes = JSON.parse(project.notesJson || '{}');
-      }
-    } catch {
-      loadedNotes = {};
-    }
+    parsedCodes = parseBoardCodes(project.codeText || '', getProgrammableBoardIds(loadedComponents), loadedComponents);
 
     setComponents(loadedComponents);
     setWires(loadedWires);
-    setComponentNotes(loadedNotes);
-    setCode(project.codeText || '');
+    setBoardCodes(parsedCodes);
 
     try {
-      setWidgets(JSON.parse(project.widgetsJson || '[]'));
+      const parsed = JSON.parse(project.widgetsJson || '[]');
+      if (Array.isArray(parsed)) {
+        setWidgets(parsed);
+        setDatastreams(DEFAULT_DATASTREAMS);
+        setDashboardSetupStep(parsed.length > 0 ? 4 : 0);
+      } else {
+        setWidgets(parsed.widgets || []);
+        setDatastreams(parsed.datastreams?.length ? parsed.datastreams : DEFAULT_DATASTREAMS);
+        setDashboardSetupStep(parsed.setupStep ?? 0);
+      }
     } catch {
       setWidgets([]);
+      setDatastreams(DEFAULT_DATASTREAMS);
+      setDashboardSetupStep(0);
     }
 
     setSelectedId(null);
@@ -184,9 +213,8 @@ export const App: React.FC = () => {
     const snapshot: ProjectState = {
       components: loadedComponents,
       wires: loadedWires,
-      code: project.codeText || '',
+      code: serializeBoardCodes(parsedCodes),
       widgets: JSON.parse(project.widgetsJson || '[]'),
-      componentNotes: loadedNotes,
       boardType: (project.boardType as BoardType) || 'arduino_uno',
     };
     setHistory([snapshot]);
@@ -204,7 +232,7 @@ export const App: React.FC = () => {
     if (!template) return;
     setComponents(template.components);
     setWires(template.wires);
-    setCode(template.code);
+    setBoardCodes(parseBoardCodes(template.code, getProgrammableBoardIds(template.components), template.components));
     setWidgets(template.widgets || []);
     setSelectedId(null);
     setIsWireSelected(false);
@@ -224,7 +252,12 @@ export const App: React.FC = () => {
   const buildComponentInstance = (type: ComponentType, x: number, y: number): ComponentInstance => ({
     id: `${type}_${Date.now()}`,
     type,
-    name: `${type.toUpperCase().replace('_', ' ')} ${components.length + 1}`,
+    name:
+      type === 'arduino_uno'
+        ? `Arduino Uno ${components.filter((c) => c.type === 'arduino_uno').length + 1}`
+        : type === 'esp32'
+          ? `ESP32 ${components.filter((c) => c.type === 'esp32').length + 1}`
+          : `${COMPONENT_DEFINITIONS[type]?.name || type} ${components.length + 1}`,
     x,
     y,
     rotation: 0,
@@ -239,7 +272,9 @@ export const App: React.FC = () => {
             ? { sensorValue: 512 }
             : type === 'ultrasonic'
               ? { sensorValue: 50 }
-              : {},
+              : type === 'dht11'
+                ? { tempC: 25, humidity: 50 }
+                : {},
   });
 
   const handleQueueComponent = (type: ComponentType) => {
@@ -255,6 +290,16 @@ export const App: React.FC = () => {
     setSelectedId(newComp.id);
     setIsWireSelected(false);
     setPendingComponentType(null);
+
+    if (type === 'arduino_uno' || type === 'esp32') {
+      const suggested = suggestCodeForBoard(newComp.id, nextComps, wires);
+      setBoardCodes((prev) => ({
+        activeBoardId: newComp.id,
+        files: { ...prev.files, [newComp.id]: suggested },
+      }));
+      if (type === 'esp32') setBoardType('esp32');
+    }
+
     pushHistory(nextComps, wires);
   };
 
@@ -339,7 +384,7 @@ export const App: React.FC = () => {
       const prevState = history[prevIdx];
       setComponents(prevState.components);
       setWires(prevState.wires);
-      setCode(prevState.code);
+      setBoardCodes(parseBoardCodes(prevState.code, getProgrammableBoardIds(prevState.components), prevState.components));
       setWidgets(prevState.widgets);
       setSelectedId(null);
       simulatorRef.current?.updateCircuit(prevState.components, prevState.wires);
@@ -354,7 +399,7 @@ export const App: React.FC = () => {
       const nextState = history[nextIdx];
       setComponents(nextState.components);
       setWires(nextState.wires);
-      setCode(nextState.code);
+      setBoardCodes(parseBoardCodes(nextState.code, getProgrammableBoardIds(nextState.components), nextState.components));
       setWidgets(nextState.widgets);
       setSelectedId(null);
       simulatorRef.current?.updateCircuit(nextState.components, nextState.wires);
@@ -364,11 +409,12 @@ export const App: React.FC = () => {
 
   const validateBeforeSimulation = (): string[] => {
     const errors: string[] = [];
-    const hasBoard = components.some((c) => c.type === 'arduino_uno');
+    const boardIds = getProgrammableBoardIds(components);
+    const hasBoard = boardIds.length > 0;
     const hasPower = components.some((c) =>
       ['battery_9v', 'battery_aa', 'battery_coin'].includes(c.type),
     );
-    if (!hasBoard) errors.push('Add an Arduino Uno board to the circuit.');
+    if (!hasBoard) errors.push('Add an Arduino Uno or ESP32 board to the circuit.');
     if (!hasPower && wires.length > 0) {
       const hasPowerWire = wires.some((w) => {
         const fromPin = w.fromPinId;
@@ -377,10 +423,16 @@ export const App: React.FC = () => {
       });
       if (!hasPowerWire) errors.push('Connect power (5V/VIN or battery) to run the circuit.');
     }
-    if (!code.trim()) errors.push('Write code in the Arduino IDE tab before simulating.');
-    if (!code.includes('void setup') || !code.includes('void loop')) {
-      errors.push('Code must contain void setup() and void loop().');
-    }
+    boardIds.forEach((id) => {
+      const code = boardCodes.files[id] || '';
+      const comp = components.find((c) => c.id === id);
+      const label = comp?.name || id;
+      if (!code.trim()) errors.push(`Write code for ${label} before simulating.`);
+      else if (!code.includes('void setup') || !code.includes('void loop')) {
+        errors.push(`${label}: code must contain void setup() and void loop().`);
+      }
+    });
+    if (!hasBoard && !activeSketchCode.trim()) errors.push('Write code in the Code panel before simulating.');
     return errors;
   };
 
@@ -396,24 +448,74 @@ export const App: React.FC = () => {
       }
       setValidationErrors([]);
       setIsSimulating(true);
-      simulatorRef.current?.start(code, 'code');
+      simulatorRef.current?.start(activeSketchCode, 'code');
     }
   };
 
   const handleWidgetInteraction = (pin: string, value: number) => {
-    setDigitalPins((prev) => ({ ...prev, [pin]: value }));
-    simulatorRef.current?.setDigitalPin(pin, value);
+    const key = pin.toUpperCase();
+    setDigitalPins((prev) => ({ ...prev, [pin]: value, [key]: value }));
+    if (key.startsWith('V')) {
+      simulatorRef.current?.setDigitalPin(key, value);
+    } else {
+      simulatorRef.current?.setDigitalPin(pin, value);
+    }
   };
 
-  const handleCodeChange = (newCode: string) => {
-    setCode(newCode);
+  const handleBoardCodesChange = (data: BoardCodeFiles) => {
+    setBoardCodes(data);
     markDirty();
   };
 
-  const handleUpdateComponentNote = (compId: string, note: string) => {
-    setComponentNotes((prev) => ({ ...prev, [compId]: note }));
-    markDirty();
-  };
+  // Sync board code files when Arduinos added/removed
+  useEffect(() => {
+    const ids = getProgrammableBoardIds(components);
+    setBoardCodes((prev) => {
+      const files = { ...prev.files };
+      ids.forEach((id) => {
+        if (!files[id]) {
+          const comp = components.find((c) => c.id === id);
+          files[id] = defaultSketchForBoard((comp?.type as ComponentType) || 'arduino_uno');
+        }
+      });
+      Object.keys(files).forEach((id) => { if (!ids.includes(id)) delete files[id]; });
+      const extraFiles = { ...(prev.extraFiles || {}) };
+      const activeTab = { ...(prev.activeTab || {}) };
+      Object.keys(extraFiles).forEach((id) => { if (!ids.includes(id)) delete extraFiles[id]; });
+      Object.keys(activeTab).forEach((id) => { if (!ids.includes(id)) delete activeTab[id]; });
+      return {
+        activeBoardId: prev.activeBoardId && ids.includes(prev.activeBoardId) ? prev.activeBoardId : ids[0] || null,
+        files,
+        extraFiles,
+        activeTab,
+      };
+    });
+  }, [components.length, components.map((c) => c.id).join(',')]);
+
+  // Publish Blynk-style telemetry during simulation
+  useEffect(() => {
+    if (!isSimulating || !projectApiKey) return;
+    const interval = setInterval(() => {
+      const gas = components.find((c) => c.type === 'gas_sensor');
+      const ldr = components.find((c) => c.type === 'ldr');
+      fetch('/api/telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: projectApiKey,
+          data: {
+            V0: gas?.state?.sensorValue ?? analogPins['A0'] ?? 0,
+            V1: ldr?.state?.sensorValue ?? analogPins['A1'] ?? 0,
+            V2: digitalPins['13'] ?? 0,
+            A0: gas?.state?.sensorValue ?? analogPins['A0'] ?? 0,
+            A1: ldr?.state?.sensorValue ?? analogPins['A1'] ?? 0,
+            D13: digitalPins['13'] ?? 0,
+          },
+        }),
+      }).catch(() => {});
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isSimulating, projectApiKey, components, analogPins, digitalPins]);
 
   const handleLogout = () => {
     localStorage.removeItem('studioiot_user');
@@ -421,13 +523,6 @@ export const App: React.FC = () => {
     setUser(null);
     setPhase('login');
   };
-
-  const hasArduino = components.some((c) => c.type === 'arduino_uno');
-  const hasWiresToBoard = wires.some((w) => {
-    const fromComp = components.find((c) => c.id === w.fromComponentId);
-    const toComp = components.find((c) => c.id === w.toComponentId);
-    return fromComp?.type === 'arduino_uno' || toComp?.type === 'arduino_uno';
-  });
 
   const selectedComponent = viewMode === 'circuit' && !isWireSelected ? components.find((c) => c.id === selectedId) || null : null;
   const selectedWire = viewMode === 'circuit' && isWireSelected ? wires.find((w) => w.id === selectedId) || null : null;
@@ -469,14 +564,16 @@ export const App: React.FC = () => {
         onUndo={handleUndo}
         onRedo={handleRedo}
         projectName={projectName}
+        onProjectNameChange={(name) => {
+          setProjectName(name);
+          markDirty();
+        }}
         onBackToProjects={() => {
           if (isDirtyRef.current) saveProject();
           setPhase('projects');
         }}
         saveStatus={saveStatus}
         onManualSave={saveProject}
-        onUploadToBoard={() => arduinoUploadRef.current?.()}
-        canUpload={hasArduino && hasWiresToBoard && Boolean(code.trim())}
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -484,20 +581,32 @@ export const App: React.FC = () => {
           <ComponentSidebar
             onPickComponent={handleQueueComponent}
             pendingComponentType={pendingComponentType}
+            canvasTool={canvasTool}
+            onSetCanvasTool={handleSetCanvasTool}
             isSimulating={isSimulating}
           />
         )}
 
         {viewMode === 'circuit' && (
           <>
+            <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             <Canvas
               components={components}
               wires={wires}
               selectedId={selectedId}
-              onSelect={(id, isWire = false) => {
-                setSelectedId(id);
-                setIsWireSelected(Boolean(id) && isWire);
-              }}
+            onSelect={(id, isWire = false) => {
+              setSelectedId(id);
+              setIsWireSelected(Boolean(id) && isWire);
+              if (isWire && id) {
+                setCanvasTool('select');
+              }
+              if (id && !isWire) {
+                const comp = components.find((c) => c.id === id);
+                if (comp && (comp.type === 'arduino_uno' || comp.type === 'esp32')) {
+                  setBoardCodes((prev) => ({ ...prev, activeBoardId: id }));
+                }
+              }
+            }}
               onUpdateComponents={(comps) => {
                 if (!isSimulating) {
                   setComponents(comps);
@@ -511,7 +620,10 @@ export const App: React.FC = () => {
                 }
               }}
               activeWireColor={activeWireColor}
-              onChangeWireColor={setActiveWireColor}
+              onChangeWireColor={handleChangeWireColor}
+              onUpdateWire={handleUpdateWire}
+              wireMode={canvasTool === 'wire'}
+              manualWireColor={manualWireColor}
               isSimulating={isSimulating}
               ledStates={ledStates}
               ledWarnings={ledWarnings}
@@ -539,6 +651,14 @@ export const App: React.FC = () => {
               onDeleteSelected={handleDeleteSelected}
               isSimulating={isSimulating}
             />
+            </div>
+            <CircuitCodePanel
+              boardCodes={boardCodes}
+              onChangeBoardCodes={handleBoardCodesChange}
+              components={components}
+              wires={wires}
+              isSimulating={isSimulating}
+            />
           </>
         )}
 
@@ -549,6 +669,16 @@ export const App: React.FC = () => {
               setWidgets(w);
               markDirty();
             }}
+            datastreams={datastreams}
+            onUpdateDatastreams={(ds) => {
+              setDatastreams(ds);
+              markDirty();
+            }}
+            setupStep={dashboardSetupStep}
+            onSetupStepChange={(step) => {
+              setDashboardSetupStep(step);
+              markDirty();
+            }}
             digitalPins={digitalPins}
             analogPins={analogPins}
             serialLogs={serialLogs}
@@ -556,13 +686,14 @@ export const App: React.FC = () => {
             isSimulating={isSimulating}
             onWidgetInteraction={handleWidgetInteraction}
             apiKey={projectApiKey}
+            onChangeViewMode={setViewMode}
           />
         )}
 
         {viewMode === 'arduino' && (
           <ArduinoIDEPanel
-            code={code}
-            onChangeCode={handleCodeChange}
+            boardCodes={boardCodes}
+            onChangeBoardCodes={handleBoardCodesChange}
             serialLogs={serialLogs}
             onClearSerial={() => setSerialLogs([])}
             boardType={boardType}
@@ -573,10 +704,6 @@ export const App: React.FC = () => {
             components={components}
             wires={wires}
             isSimulating={isSimulating}
-            projectName={projectName}
-            componentNotes={componentNotes}
-            onUpdateComponentNote={handleUpdateComponentNote}
-            uploadRef={arduinoUploadRef}
           />
         )}
       </div>
