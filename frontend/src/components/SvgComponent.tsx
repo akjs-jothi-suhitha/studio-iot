@@ -131,6 +131,21 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
             <text x="12" y="152" fill="#ef4444" fontSize="9" fontWeight="bold">+</text>
             <line x1="20" y1="137" x2={width - 20} y2="137" stroke="#3b82f6" strokeWidth="1" />
             <text x="12" y="142" fill="#3b82f6" fontSize="9" fontWeight="bold">-</text>
+
+            {/* Render realistic square holes for all pins */}
+            {def.pins.map((p) => (
+              <rect
+                key={`hole_vis_${p.id}`}
+                x={p.x - 3.5}
+                y={p.y - 3.5}
+                width="7"
+                height="7"
+                rx="1"
+                fill="#334155"
+                stroke="#0f172a"
+                strokeWidth="0.5"
+              />
+            ))}
           </g>
         );
 
@@ -311,71 +326,42 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
         );
 
       case 'gas_sensor':
-        // Gas slider component
         const gasVal = instance.state?.sensorValue ?? 120;
         return (
           <g>
-            {/* Outer Pin legs */}
             {Array.from({ length: 6 }).map((_, i) => {
               const angle = (i * Math.PI) / 3;
               const px = 30 + 20 * Math.cos(angle);
               const py = 30 + 20 * Math.sin(angle);
               return <circle key={i} cx={px} cy={py} r="2.5" fill="#94a3b8" stroke="#64748b" strokeWidth="0.5" />;
             })}
-
-            {/* Outer ceramic circle */}
             <circle cx="30" cy="30" r="23" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="2" />
-            
-            {/* Metal mesh */}
             <circle cx="30" cy="30" r="18" fill="#475569" stroke="#334155" strokeWidth="1.5" />
             <circle cx="30" cy="30" r="14" fill="#64748b" stroke="#475569" strokeWidth="1" strokeDasharray="2 2" />
             <circle cx="30" cy="30" r="8" fill="#334155" opacity="0.8" />
-            
-            {/* MQ-2 Label */}
             <text x="30" y="33" fill="#cbd5e1" fontSize="7" fontWeight="bold" fontFamily="sans-serif" textAnchor="middle">MQ-2</text>
-
-            {/* Visual gas cloud during simulation */}
             {isSimulating && gasVal > 200 && (
-              <circle cx="30" cy="30" r={18 + (gasVal - 200) / 30} fill="#f59e0b" opacity="0.18" style={{ pointerEvents: 'none' }}>
-                <animate attributeName="opacity" values="0.1;0.25;0.1" dur="2s" repeatCount="indefinite" />
-              </circle>
+              <>
+                <circle cx="30" cy="30" r={14 + (gasVal - 200) / 40} fill="#f59e0b" opacity="0.15">
+                  <animate attributeName="opacity" values="0.08;0.22;0.08" dur="2s" repeatCount="indefinite" />
+                </circle>
+                {[0, 1, 2].map((i) => (
+                  <circle key={i} cx={30 + (i - 1) * 8} cy={8 - i * 3} r={3 + gasVal / 400} fill="#94a3b8" opacity="0.3">
+                    <animate attributeName="cy" values={`${8 - i * 3};${-5 - i * 5};${8 - i * 3}`} dur={`${1.5 + i * 0.3}s`} repeatCount="indefinite" />
+                  </circle>
+                ))}
+              </>
             )}
-
-            {/* Slider setting overlay if selected/active */}
-            <foreignObject x="-20" y="62" width="100" height="25">
-              <div className="flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="range"
-                  min="0"
-                  max="1000"
-                  value={gasVal}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    if (onValueChange) onValueChange(instance.id, val);
-                  }}
-                  className="w-16 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                />
-                <span className="text-[7.5px] bg-slate-100 text-slate-700 px-1 rounded font-mono mt-0.5">
-                  Gas: {gasVal}
-                </span>
-              </div>
-            </foreignObject>
           </g>
         );
 
       case 'ldr':
-        const ldrVal = instance.state?.sensorValue ?? 500;
         return (
           <g>
-            {/* Pins */}
             <line x1="5" y1="7" x2="5" y2="15" stroke="#94a3b8" strokeWidth="2" />
             <line x1="25" y1="7" x2="25" y2="15" stroke="#94a3b8" strokeWidth="2" />
-
-            {/* Ceramic Plate */}
             <rect x="2" y="2" width="26" height="10" rx="2" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="1" />
             <rect x="3" y="3" width="24" height="8" rx="1" fill="#ea580c" />
-
-            {/* Squiggly line photo-conductive track */}
             <path
               d="M 6 5 L 10 5 L 10 9 L 14 9 L 14 5 L 18 5 L 18 9 L 22 9 L 22 5"
               fill="none"
@@ -384,70 +370,23 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-
-            {/* Slider Control */}
-            <foreignObject x="-10" y="17" width="50" height="25">
-              <div className="flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="range"
-                  min="0"
-                  max="1023"
-                  value={ldrVal}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    if (onValueChange) onValueChange(instance.id, val);
-                  }}
-                  className="w-12 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                />
-                <span className="text-[7px] bg-slate-100 px-1 rounded font-mono">
-                  Lux: {ldrVal}
-                </span>
-              </div>
-            </foreignObject>
           </g>
         );
 
       case 'potentiometer':
-        const potPos = instance.state?.sensorValue ?? 512; // 0-1023
-        const rotAngle = (potPos / 1023) * 270 - 135; // Map to -135 to 135 deg
-        
+        const potPos = instance.state?.sensorValue ?? 512;
+        const rotAngle = (potPos / 1023) * 270 - 135;
         return (
           <g>
-            {/* Wire terminals */}
             <line x1="8" y1="28" x2="8" y2="38" stroke="#94a3b8" strokeWidth="2.5" />
             <line x1="20" y1="28" x2="20" y2="38" stroke="#94a3b8" strokeWidth="2.5" />
             <line x1="32" y1="28" x2="32" y2="38" stroke="#94a3b8" strokeWidth="2.5" />
-
-            {/* Case Body */}
             <circle cx="20" cy="18" r="18" fill="#3b82f6" stroke="#2563eb" strokeWidth="1.5" />
             <circle cx="20" cy="18" r="14" fill="#cbd5e1" />
-
-            {/* Rotating dial */}
             <g transform={`rotate(${rotAngle}, 20, 18)`}>
               <circle cx="20" cy="18" r="10" fill="#475569" />
-              {/* Pointer line */}
               <line x1="20" y1="18" x2="20" y2="10" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
             </g>
-
-            {/* Slider Knob Control */}
-            <foreignObject x="-10" y="40" width="60" height="25">
-              <div className="flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="range"
-                  min="0"
-                  max="1023"
-                  value={potPos}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    if (onValueChange) onValueChange(instance.id, val);
-                  }}
-                  className="w-14 h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                />
-                <span className="text-[7px] bg-slate-100 px-0.5 rounded font-mono">
-                  Pot: {potPos}
-                </span>
-              </div>
-            </foreignObject>
           </g>
         );
 
@@ -663,10 +602,19 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
 
   return (
     <g transform={`translate(${instance.x}, ${instance.y}) rotate(${instance.rotation || 0}, ${width / 2}, ${height / 2})`}>
-      {/* Component Core Visuals */}
       {renderSVG()}
 
-      {/* Invisible pin hit targets for wiring — no visible circles */}
+      {/* Select & drag hit area */}
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        fill="transparent"
+        pointerEvents="all"
+        style={{ cursor: 'move' }}
+      />
+
       {def.pins.map((pin: Pin) => (
         <circle
           key={pin.id}
@@ -675,6 +623,7 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
           r="9"
           fill="transparent"
           stroke="transparent"
+          className="hover:fill-blue-400 hover:opacity-50 transition-colors duration-150"
           pointerEvents="all"
           data-pin-id={pin.id}
           data-component-id={instance.id}

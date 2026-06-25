@@ -124,7 +124,7 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-white">
+      <div className="grid min-h-0 flex-1 grid-cols-2 gap-0 overflow-y-auto bg-white content-start">
         {filteredDefs.map((def) => {
           const isPending = pendingComponentType === def.type;
           return (
@@ -132,21 +132,19 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
               key={def.type}
               type="button"
               draggable={!isSimulating}
+              onClick={() => !isSimulating && onPickComponent(def.type)}
               onDragStart={(e) => {
                 e.dataTransfer.setData('application/json', JSON.stringify({ type: def.type }));
               }}
               disabled={isSimulating}
-              className={`flex w-full items-center gap-2 border-b border-slate-100 px-2.5 py-2 text-left transition ${
+              className={`flex w-full flex-col items-center gap-1 border-b border-slate-100 px-2 py-2.5 text-center transition ${
                 isPending ? 'bg-amber-50 ring-1 ring-inset ring-amber-300' : 'hover:bg-slate-50'
-              } ${isSimulating ? 'cursor-not-allowed opacity-50' : ''}`}
+              } ${isSimulating ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
             >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-lg">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-xl">
                 {COMPONENT_ICONS[def.type] || '📦'}
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-xs font-semibold text-slate-800">{def.name}</div>
-                <div className="truncate text-[10px] text-slate-500">{def.description}</div>
-              </div>
+              <div className="w-full truncate text-[10px] font-semibold text-slate-700">{def.name}</div>
             </button>
           );
         })}
@@ -155,7 +153,7 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
       <div className="border-t border-[#aeb4bc] bg-[#dfe3e8] px-3 py-2 text-[10px] text-slate-600">
         {isSimulating
           ? 'Stop simulation to edit the circuit.'
-          : 'Drag a part to the workplane to place it'}
+          : 'Click or drag a part to place it on the workplane'}
       </div>
     </aside>
   );

@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Cable } from 'lucide-react';
 import { ComponentInstance, ComponentType, Wire } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
-import { findNearestPin, getPinAbsoluteCoords } from '../utils/pinCoords';
+import { findNearestPin, getPinAbsoluteCoords, collectPinHits } from '../utils/pinCoords';
+import { buildWirePath, getPinHighlightColor, WIRE_COLORS } from '../utils/wireUtils';
 import { RealisticComponent } from './RealisticComponent';
+import { SimulationSensorPanel } from './SimulationSensorPanel';
 
 interface CanvasProps {
   components: ComponentInstance[];
@@ -35,28 +37,11 @@ interface CanvasProps {
 }
 
 const GRID_SIZE = 10;
-const WIRE_SAG = 48;
 const PIN_SNAP_DISTANCE = 24;
-const WIRE_COLORS = [
-  { name: 'Red', hex: '#ef4444' },
-  { name: 'Black', hex: '#1f2937' },
-  { name: 'Orange', hex: '#f97316' },
-  { name: 'Yellow', hex: '#eab308' },
-  { name: 'Green', hex: '#10b981' },
-  { name: 'Blue', hex: '#3b82f6' },
-  { name: 'Purple', hex: '#8b5cf6' },
-  { name: 'Brown', hex: '#78350f' },
-  { name: 'White', hex: '#f8fafc' },
-];
 
 export { getPinAbsoluteCoords };
 
 const snapToGrid = (value: number): number => Math.round(value / GRID_SIZE) * GRID_SIZE;
-
-const buildBezierPath = (from: { x: number; y: number }, to: { x: number; y: number }) => {
-  const midY = Math.max(from.y, to.y) + WIRE_SAG;
-  return `M ${from.x} ${from.y} C ${from.x} ${midY} ${to.x} ${midY} ${to.x} ${to.y}`;
-};
 
 export const Canvas: React.FC<CanvasProps> = ({
   components,
@@ -198,6 +183,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
         return;
       }
+      if (isSimulating) return;
       if (event.key === 'Escape') {
         if (activeWiringSrc) {
           setActiveWiringSrc(null);
@@ -252,6 +238,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     pushHistory,
     selectedId,
     wires,
+    isSimulating,
   ]);
 
   const handleWheel = (event: React.WheelEvent) => {
@@ -277,6 +264,11 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   const handleMouseDown = (event: React.MouseEvent) => {
+    if (isSimulating) {
+      onSelect(null);
+      return;
+    }
+
     const canvasCoords = clientToCanvasCoords(event.clientX, event.clientY);
     setMousePos(canvasCoords);
 
@@ -361,6 +353,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     if (draggedCompId) {
+      if (isSimulating) return;
       const nextComps = components.map((component) =>
         component.id === draggedCompId
           ? {
@@ -384,28 +377,66 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     const fromCoords = getPinAbsoluteCoords(fromComp, wire.fromPinId);
     const toCoords = getPinAbsoluteCoords(toComp, wire.toPinId);
-    const path = buildBezierPath(fromCoords, toCoords);
+    const path = buildWirePath(fromCoords, toCoords);
     const isSelected = selectedId === wire.id;
     const isAlligator = wire.wireType === 'alligator';
     const isRetractable = wire.wireType === 'retractable';
+    const strokeW = isAlligator ? 5 : isRetractable ? 2.5 : 3.5;
 
     return (
       <g key={wire.id} onClick={(event) => { event.stopPropagation(); onSelect(wire.id, true); }}>
-        <path d={path} fill="none" stroke="transparent" strokeWidth="16" className="cursor-pointer" />
-        {isSelected && <path d={path} fill="none" stroke="#2563eb" strokeWidth="8" opacity="0.35" />}
+        <path d={path} fill="none" stroke="transparent" strokeWidth="18" className="cursor-pointer" />
+        {isSelected && <path d={path} fill="none" stroke="#2563eb" strokeWidth={strokeW + 6} opacity="0.25" strokeLinecap="round" />}
         <path
           d={path}
           fill="none"
           stroke={wire.color}
-          strokeWidth={isAlligator ? "6" : isRetractable ? "2" : "4"}
+          strokeWidth={strokeW}
           strokeLinecap="round"
           strokeLinejoin="round"
-          strokeDasharray={isRetractable ? "5, 5" : "none"}
+          strokeDasharray={isRetractable ? '6 4' : 'none'}
+          opacity={0.92}
         />
-        <circle cx={fromCoords.x} cy={fromCoords.y} r={isAlligator ? "5" : "3.5"} fill={wire.color} stroke="#fff" strokeWidth="1" pointerEvents="none" />
-        <circle cx={toCoords.x} cy={toCoords.y} r={isAlligator ? "5" : "3.5"} fill={wire.color} stroke="#fff" strokeWidth="1" pointerEvents="none" />
+        <circle cx={fromCoords.x} cy={fromCoords.y} r={isAlligator ? 4.5 : 3} fill={wire.color} stroke="#fff" strokeWidth="1.2" pointerEvents="none" />
+        <circle cx={toCoords.x} cy={toCoords.y} r={isAlligator ? 4.5 : 3} fill={wire.color} stroke="#fff" strokeWidth="1.2" pointerEvents="none" />
       </g>
     );
+  };
+
+  const renderPinHighlights = () => {
+    if (!activeWiringSrc && !hoveredPin) return null;
+
+    const pins = collectPinHits(components);
+    return pins.map((pin) => {
+      const def = COMPONENT_DEFINITIONS[components.find((c) => c.id === pin.componentId)?.type || 'led'];
+      const pinDef = def?.pins.find((p) => p.id === pin.pinId);
+      const isSource =
+        activeWiringSrc &&
+        pin.componentId === activeWiringSrc.compId &&
+        pin.pinId === activeWiringSrc.pinId;
+      const isTarget =
+        hoveredPin &&
+        pin.componentId === hoveredPin.compId &&
+        pin.pinId === hoveredPin.pinId;
+      if (!isSource && !isTarget && !activeWiringSrc) return null;
+
+      let role: 'source' | 'target' | 'hover' = 'hover';
+      if (isSource) role = 'source';
+      else if (isTarget) role = 'target';
+      else if (!activeWiringSrc) return null;
+
+      const color = getPinHighlightColor(pinDef?.type, role);
+      const radius = isSource || isTarget ? 8 : 0;
+
+      if (radius === 0) return null;
+
+      return (
+        <g key={`${pin.componentId}-${pin.pinId}`} pointerEvents="none">
+          <circle cx={pin.x} cy={pin.y} r={radius + 4} fill={color} opacity="0.2" />
+          <circle cx={pin.x} cy={pin.y} r={radius} fill="none" stroke={color} strokeWidth="2.5" />
+        </g>
+      );
+    });
   };
 
   const renderActiveWire = () => {
@@ -417,11 +448,17 @@ export const Canvas: React.FC<CanvasProps> = ({
       return null;
     }
     const startCoords = getPinAbsoluteCoords(source, activeWiringSrc.pinId);
-    const path = buildBezierPath(startCoords, mousePos);
+    const endCoords = hoveredPin
+      ? getPinAbsoluteCoords(
+          components.find((c) => c.id === hoveredPin.compId)!,
+          hoveredPin.pinId,
+        )
+      : mousePos;
+    const path = buildWirePath(startCoords, endCoords);
     const color = hoveredPin ? '#f59e0b' : activeWireColor;
 
     return (
-      <path d={path} fill="none" stroke={color} strokeWidth="4" strokeDasharray="7 5" opacity="0.9" />
+      <path d={path} fill="none" stroke={color} strokeWidth="3.5" strokeDasharray="8 4" opacity="0.85" strokeLinecap="round" />
     );
   };
 
@@ -477,23 +514,43 @@ export const Canvas: React.FC<CanvasProps> = ({
       onMouseUp={finishInteraction}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      style={{ cursor: pendingComponentType ? 'copy' : isPanning ? 'grabbing' : isWiring ? 'crosshair' : 'default' }}
+      style={{ cursor: isSimulating ? 'default' : pendingComponentType ? 'copy' : isPanning ? 'grabbing' : isWiring ? 'crosshair' : 'default' }}
     >
       <div className="absolute inset-x-0 top-0 z-20 flex h-11 items-center justify-between border-b border-slate-200 bg-white/95 px-4 text-xs text-slate-700 shadow-sm backdrop-blur">
         <div className="flex items-center gap-2 font-semibold">
           <span className="uppercase tracking-widest text-slate-500">Workplane</span>
-          {pendingComponentType && (
+          {isSimulating && (
+            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-emerald-800">Simulation active</span>
+          )}
+          {pendingComponentType && !isSimulating && (
             <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-900">
               Place {COMPONENT_DEFINITIONS[pendingComponentType].name}
             </span>
           )}
           {isWiring && (
             <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-sky-800">
-              Click another pin to connect wire
+              Click destination pin to connect
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {!isSimulating && (
+            <div className="flex items-center gap-1.5">
+              <Cable className="h-3.5 w-3.5 text-slate-400" />
+              {WIRE_COLORS.slice(0, 7).map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onChangeWireColor(c.hex); }}
+                  className={`h-5 w-5 rounded-full border-2 transition ${
+                    activeWireColor === c.hex ? 'border-slate-800 scale-110' : 'border-white shadow-sm hover:scale-105'
+                  }`}
+                  style={{ backgroundColor: c.hex }}
+                  title={c.name}
+                />
+              ))}
+            </div>
+          )}
           <button onClick={() => setZoom(Math.max(20, zoom - 10))} className="rounded bg-white px-2 py-1 shadow-sm">−</button>
           <span className="min-w-12 text-center font-mono">{zoom}%</span>
           <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="rounded border border-slate-200 bg-white px-2 py-1 shadow-sm">+</button>
@@ -531,6 +588,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         <g transform={`translate(${panX}, ${panY + 44}) scale(${zoom / 100})`}>
           {renderComponentLayer()}
           {wires.map(renderWire)}
+          {renderPinHighlights()}
           {renderActiveWire()}
           {pendingPreview && (
             <g opacity="0.45" pointerEvents="none">
@@ -549,6 +607,12 @@ export const Canvas: React.FC<CanvasProps> = ({
           )}
         </g>
       </svg>
+
+      <SimulationSensorPanel
+        components={components}
+        onValueChange={onValueChange}
+        isSimulating={isSimulating}
+      />
     </div>
   );
 };

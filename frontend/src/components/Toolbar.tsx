@@ -2,27 +2,25 @@ import React from 'react';
 import {
   Play,
   Square,
-  Code,
   RotateCw,
   Trash2,
   Undo2,
   Redo2,
-  Activity,
-  Cpu,
   LayoutDashboard,
   CircuitBoard,
   Eraser,
+  Code2,
+  FolderOpen,
+  Save,
+  Upload,
 } from 'lucide-react';
+import { ViewMode } from '../types';
 
 interface ToolbarProps {
-  viewMode: 'circuit' | 'dashboard';
-  onChangeViewMode: (mode: 'circuit' | 'dashboard') => void;
+  viewMode: ViewMode;
+  onChangeViewMode: (mode: ViewMode) => void;
   isSimulating: boolean;
   onToggleSimulation: () => void;
-  simulationMode: 'circuit' | 'code';
-  onChangeSimulationMode: (mode: 'circuit' | 'code') => void;
-  isCodeOpen: boolean;
-  onToggleCode: () => void;
   onClearCanvas: () => void;
   onRotateSelected: () => void;
   onDeleteSelected: () => void;
@@ -31,6 +29,12 @@ interface ToolbarProps {
   canRedo: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  projectName: string;
+  onBackToProjects: () => void;
+  saveStatus: 'saved' | 'saving' | 'unsaved';
+  onManualSave: () => void;
+  onUploadToBoard: () => void;
+  canUpload: boolean;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -38,10 +42,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onChangeViewMode,
   isSimulating,
   onToggleSimulation,
-  simulationMode,
-  onChangeSimulationMode,
-  isCodeOpen,
-  onToggleCode,
   onClearCanvas,
   onRotateSelected,
   onDeleteSelected,
@@ -50,130 +50,132 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   canRedo,
   onUndo,
   onRedo,
+  projectName,
+  onBackToProjects,
+  saveStatus,
+  onManualSave,
+  onUploadToBoard,
+  canUpload,
 }) => (
-  <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 bg-[#0f172a] px-5 text-slate-100 shadow-md select-none">
-    {/* Left: Logo & Project Info */}
-    <div className="flex items-center gap-6">
-      <div className="flex shrink-0 items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 text-lg font-extrabold text-white shadow-lg">SI</div>
-        <div>
-          <div className="text-lg font-bold tracking-tight text-white leading-tight">StudioIOT</div>
-          <div className="text-xs font-medium uppercase tracking-widest text-cyan-400">Circuit Lab</div>
+  <header className="flex min-h-14 shrink-0 items-center justify-between gap-2 bg-[#0f172a] px-4 text-slate-100 shadow-md select-none">
+    <div className="flex min-w-0 items-center gap-4">
+      <button
+        type="button"
+        onClick={onBackToProjects}
+        className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-400 hover:border-slate-500 hover:text-white"
+      >
+        <FolderOpen className="h-4 w-4" />
+        Projects
+      </button>
+
+      <div className="hidden h-8 w-px bg-slate-700 sm:block" />
+
+      <div className="min-w-0">
+        <div className="truncate text-sm font-bold text-white">{projectName}</div>
+        <div className="text-[10px] text-slate-500">
+          {saveStatus === 'saving' && 'Saving…'}
+          {saveStatus === 'saved' && 'All changes saved'}
+          {saveStatus === 'unsaved' && 'Unsaved changes'}
         </div>
       </div>
 
-      <div className="hidden h-8 w-px bg-slate-700 md:block" />
-
-      {/* Main Views */}
       <div className="hidden items-center rounded-lg bg-slate-800/50 p-1 md:flex border border-slate-700/50">
         <button
           type="button"
           onClick={() => onChangeViewMode('circuit')}
-          className={`flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-semibold transition ${
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
             viewMode === 'circuit' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <CircuitBoard className="h-4 w-4" />
+          <CircuitBoard className="h-3.5 w-3.5" />
           Circuit
         </button>
         <button
           type="button"
+          onClick={() => onChangeViewMode('arduino')}
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
+            viewMode === 'arduino' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Code2 className="h-3.5 w-3.5" />
+          Arduino IDE
+        </button>
+        <button
+          type="button"
           onClick={() => onChangeViewMode('dashboard')}
-          className={`flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-semibold transition ${
+          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
             viewMode === 'dashboard' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          <LayoutDashboard className="h-4 w-4" />
+          <LayoutDashboard className="h-3.5 w-3.5" />
           IoT Dashboard
         </button>
       </div>
     </div>
 
-    {/* Center: Action Tools (Undo, Redo, Delete) */}
-    <div className="hidden items-center gap-1.5 rounded-lg bg-slate-800/50 p-1.5 md:flex border border-slate-700/50">
-      <button
-        type="button"
-        onClick={onUndo}
-        disabled={!canUndo}
-        className="rounded-md p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
-        title="Undo"
-      >
-        <Undo2 className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={onRedo}
-        disabled={!canRedo}
-        className="rounded-md p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
-        title="Redo"
-      >
-        <Redo2 className="h-4 w-4" />
-      </button>
-      <div className="mx-1 h-5 w-px bg-slate-700" />
-      <button
-        type="button"
-        onClick={onRotateSelected}
-        disabled={!selectedId}
-        className="rounded-md p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent"
-        title="Rotate (R)"
-      >
-        <RotateCw className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={onDeleteSelected}
-        disabled={!selectedId}
-        className="rounded-md p-2 text-slate-400 transition hover:bg-slate-700 hover:text-red-400 disabled:opacity-30 disabled:hover:bg-transparent"
-        title="Delete"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
-      <div className="mx-1 h-5 w-px bg-slate-700" />
-      <button
-        type="button"
-        onClick={onClearCanvas}
-        className="rounded-md p-2 text-slate-400 transition hover:bg-slate-700 hover:text-red-400"
-        title="Clear canvas"
-      >
-        <Eraser className="h-4 w-4" />
-      </button>
-    </div>
+    {viewMode === 'circuit' && (
+      <div className="hidden items-center gap-1 rounded-lg bg-slate-800/50 p-1 md:flex border border-slate-700/50">
+        <button type="button" onClick={onUndo} disabled={!canUndo || isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Undo">
+          <Undo2 className="h-4 w-4" />
+        </button>
+        <button type="button" onClick={onRedo} disabled={!canRedo || isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Redo">
+          <Redo2 className="h-4 w-4" />
+        </button>
+        <div className="mx-1 h-5 w-px bg-slate-700" />
+        <button type="button" onClick={onRotateSelected} disabled={!selectedId || isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Rotate">
+          <RotateCw className="h-4 w-4" />
+        </button>
+        <button type="button" onClick={onDeleteSelected} disabled={!selectedId || isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-red-400 disabled:opacity-30" title="Delete">
+          <Trash2 className="h-4 w-4" />
+        </button>
+        <div className="mx-1 h-5 w-px bg-slate-700" />
+        <button type="button" onClick={onClearCanvas} disabled={isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-red-400 disabled:opacity-30" title="Clear">
+          <Eraser className="h-4 w-4" />
+        </button>
+      </div>
+    )}
 
-    {/* Right: Simulation & Code */}
-    <div className="flex shrink-0 items-center gap-3">
-      {viewMode === 'circuit' && (
+    <div className="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        onClick={onManualSave}
+        disabled={saveStatus === 'saving'}
+        className="hidden items-center gap-1.5 rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-slate-500 sm:flex"
+      >
+        <Save className="h-3.5 w-3.5" />
+        Save
+      </button>
+
+      {viewMode === 'arduino' && (
         <button
           type="button"
-          onClick={onToggleCode}
-          className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-bold transition shadow-sm ${
-            isCodeOpen 
-              ? 'border-cyan-500 bg-cyan-500/10 text-cyan-400' 
-              : 'border-slate-600 bg-slate-800 text-slate-300 hover:border-slate-500 hover:text-white'
-          }`}
+          onClick={onUploadToBoard}
+          disabled={!canUpload || isSimulating}
+          className="flex items-center gap-1.5 rounded-lg border border-teal-600 bg-teal-600/10 px-3 py-1.5 text-xs font-bold text-teal-400 disabled:opacity-40"
         >
-          <Code className="h-4 w-4" />
-          Code
+          <Upload className="h-3.5 w-3.5" />
+          Upload
         </button>
       )}
 
       <button
         type="button"
         onClick={onToggleSimulation}
-        className={`flex items-center gap-2 rounded-lg px-6 py-2 text-sm font-bold shadow-lg transition-all ${
+        className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-bold shadow-lg transition-all ${
           isSimulating
-            ? 'bg-red-500 text-white hover:bg-red-400 hover:shadow-red-500/25 ring-2 ring-red-500/50'
-            : 'bg-emerald-500 text-white hover:bg-emerald-400 hover:shadow-emerald-500/25 ring-2 ring-emerald-500/50'
+            ? 'bg-red-500 text-white hover:bg-red-400 ring-2 ring-red-500/50'
+            : 'bg-emerald-500 text-white hover:bg-emerald-400 ring-2 ring-emerald-500/50'
         }`}
       >
         {isSimulating ? (
           <>
-            <Square className="h-4 w-4 fill-current" />
-            Stop Simulation
+            <Square className="h-3.5 w-3.5 fill-current" />
+            Stop
           </>
         ) : (
           <>
-            <Play className="h-4 w-4 fill-current" />
-            Start Simulation
+            <Play className="h-3.5 w-3.5 fill-current" />
+            Simulate
           </>
         )}
       </button>

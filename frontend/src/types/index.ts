@@ -58,11 +58,17 @@ export interface Wire {
   wireType?: 'hookup' | 'alligator' | 'retractable';
 }
 
+export type ViewMode = 'circuit' | 'dashboard' | 'arduino';
+
+export type BoardType = 'arduino_uno' | 'arduino_nano' | 'arduino_mega' | 'esp32';
+
 export interface ProjectState {
   components: ComponentInstance[];
   wires: Wire[];
   code: string;
   widgets: DashboardWidget[];
+  componentNotes?: Record<string, string>;
+  boardType?: BoardType;
 }
 
 export interface DashboardWidget {

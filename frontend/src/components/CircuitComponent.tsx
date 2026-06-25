@@ -167,8 +167,19 @@ export const CircuitComponent: React.FC<CircuitComponentProps> = (componentProps
 
   return (
     <g transform={`translate(${instance.x}, ${instance.y}) rotate(${instance.rotation || 0}, ${width / 2}, ${height / 2})`}>
+      {/* Hit area for select & drag */}
+      <rect
+        x={0}
+        y={0}
+        width={width}
+        height={height}
+        fill="transparent"
+        pointerEvents="all"
+        style={{ cursor: 'move' }}
+      />
+
       <foreignObject x={0} y={0} width={width} height={height} pointerEvents="none">
-        <div style={{ width, height, overflow: 'visible' }}>
+        <div style={{ width, height, overflow: 'visible', pointerEvents: 'none' }}>
           <WokwiElementHost
             tag={wokwi.wokwiTag}
             width={width}
@@ -180,21 +191,6 @@ export const CircuitComponent: React.FC<CircuitComponentProps> = (componentProps
           />
         </div>
       </foreignObject>
-
-      {(instance.type === 'gas_sensor' || instance.type === 'ldr') && (
-        <foreignObject x={width * 0.1} y={height + 2} width={width * 0.8} height={24} pointerEvents="auto">
-          <div className="rounded bg-white/95 px-1 py-0.5 shadow" onMouseDown={(e) => e.stopPropagation()}>
-            <input
-              type="range"
-              min="0"
-              max="1023"
-              value={instance.state?.sensorValue ?? 512}
-              onChange={(e) => componentProps.onValueChange?.(instance.id, Number(e.target.value))}
-              className="w-full accent-sky-600"
-            />
-          </div>
-        </foreignObject>
-      )}
 
       {def.pins.map((pin) => (
         <circle

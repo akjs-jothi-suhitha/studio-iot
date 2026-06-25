@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LayoutGrid,
   Gauge as GaugeIcon,
@@ -22,6 +22,7 @@ interface DashboardPanelProps {
   components: ComponentInstance[];
   isSimulating: boolean;
   onWidgetInteraction: (pin: string, value: number) => void;
+  apiKey?: string | null;
 }
 
 export const DashboardPanel: React.FC<DashboardPanelProps> = ({
@@ -33,8 +34,29 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
   components,
   isSimulating,
   onWidgetInteraction,
+  apiKey,
 }) => {
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [liveTelemetry, setLiveTelemetry] = useState<{ temperature?: number; humidity?: number }>({});
+
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket('ws://localhost:8080');
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setLiveTelemetry(data);
+        } catch {
+          /* ignore */
+        }
+      };
+    } catch {
+      /* WebSocket unavailable */
+    }
+    return () => ws?.close();
+  }, []);
+
   const activeDigitalPins = Object.values(digitalPins).filter((value) => value > 0).length;
   const analogValues = Object.values(analogPins);
   const analogAverage = analogValues.length
@@ -53,12 +75,12 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
 
     if (pin.toUpperCase() === 'A0') {
       const gas = components.find(c => c.type === 'gas_sensor');
-      return gas?.state?.sensorValue ?? 120;
+      return gas?.state?.sensorValue ?? liveTelemetry.humidity ?? 120;
     }
 
     if (pin.toUpperCase() === 'A1') {
       const ldr = components.find(c => c.type === 'ldr');
-      return ldr?.state?.sensorValue ?? 500;
+      return ldr?.state?.sensorValue ?? liveTelemetry.temperature ?? 500;
     }
 
     // Check digital pins
@@ -123,6 +145,11 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
           <p className="text-xs text-slate-500 mt-1">
             Blynk-inspired live telemetry feeds from your simulated hardware environment.
           </p>
+          {apiKey && (
+            <div className="mt-2 text-xs font-mono text-slate-600 bg-slate-200 px-2 py-1 rounded inline-block">
+              API Key: <span className="font-bold text-slate-800 select-all">{apiKey}</span>
+            </div>
+          )}
         </div>
 
         <div className="relative">

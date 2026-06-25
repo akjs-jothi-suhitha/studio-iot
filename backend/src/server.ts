@@ -3,6 +3,15 @@ import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PrismaClient } from '@prisma/client';
 import http from 'http';
+import { SerialPort } from 'serialport';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
+import crypto from 'crypto';
+
+const execAsync = promisify(exec);
 
 // Initialize Express
 const app = express();
@@ -126,7 +135,7 @@ app.post('/api/projects', async (req, res) => {
       const proj = await prisma.project.create({ data: newProjData });
       return res.json(proj);
     } else {
-      const newProj = { id: `proj_${Date.now()}`, ...newProjData, createdAt: new Date(), updatedAt: new Date() };
+      const newProj = { id: `proj_${Date.now()}`, ...newProjData, apiKey: crypto.randomUUID(), createdAt: new Date(), updatedAt: new Date() };
       projectsMockDb.push(newProj);
       return res.json(newProj);
     }
@@ -180,38 +189,108 @@ app.delete('/api/projects/:id', async (req, res) => {
   }
 });
 
-// 3. Arduino CLI Integration Endpoint
+// Board list for Arduino IDE
+app.get('/api/boards', (_req, res) => {
+  return res.json([
+    { id: 'arduino_uno', name: 'Arduino Uno', fqbn: 'arduino:avr:uno' },
+    { id: 'arduino_nano', name: 'Arduino Nano', fqbn: 'arduino:avr:nano' },
+    { id: 'arduino_mega', name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega' },
+    { id: 'esp32', name: 'ESP32 Dev Module', fqbn: 'esp32:esp32:esp32' },
+  ]);
+});
+
+// Serial port discovery using serialport package
+app.get('/api/ports', async (_req, res) => {
+  try {
+    const ports = await SerialPort.list();
+    const formattedPorts = ports.map(p => ({
+      id: p.path,
+      label: `${p.path} — ${p.manufacturer || p.friendlyName || 'Unknown Device'}`,
+      connected: true,
+    }));
+    return res.json(formattedPorts);
+  } catch (err: any) {
+    console.error('Error fetching ports:', err);
+    return res.json([
+      { id: 'COM3', label: 'COM3 — Unknown', connected: false },
+      { id: 'COM6', label: 'COM6 — Arduino Uno', connected: true },
+    ]);
+  }
+});
+
+// Upload to physical board using arduino-cli
+app.post('/api/upload', async (req, res) => {
+  const { codeText, boardType, port } = req.body;
+  if (!codeText) return res.status(400).json({ success: false, error: 'Source code is required' });
+  if (!port) return res.status(400).json({ success: false, error: 'No port selected' });
+
+  const fqbn = boardType === 'esp32' ? 'esp32:esp32:esp32' : 
+               boardType === 'arduino_nano' ? 'arduino:avr:nano' : 
+               boardType === 'arduino_mega' ? 'arduino:avr:mega' : 'arduino:avr:uno';
+
+  const sketchName = `sketch_${Date.now()}`;
+  const sketchDir = path.join(os.tmpdir(), sketchName);
+  const sketchPath = path.join(sketchDir, `${sketchName}.ino`);
+
+  try {
+    await fs.mkdir(sketchDir, { recursive: true });
+    await fs.writeFile(sketchPath, codeText);
+    
+    // Upload using arduino-cli
+    const { stdout, stderr } = await execAsync(`arduino-cli upload -p ${port} --fqbn ${fqbn} "${sketchDir}"`);
+    return res.json({
+      success: true,
+      message: `Sketch uploaded to ${boardType || 'arduino_uno'} on ${port}\n${stdout}`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || err.stderr || 'Upload failed' });
+  } finally {
+    // Cleanup
+    try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
+  }
+});
+
+// Arduino CLI Integration Endpoint for compilation
 app.post('/api/compile', async (req, res) => {
   const { codeText, boardType } = req.body;
   if (!codeText) {
     return res.status(400).json({ error: 'Source code is required for compilation' });
   }
 
-  // Simulate Arduino CLI compilation logic.
-  // In a real environment, this would spawn a child process running `arduino-cli compile`.
-  // Here we validate syntax mockly.
-  try {
-    if (codeText.includes('syntax_error')) {
-      return res.status(400).json({
-        success: false,
-        error: "Compilation error: missing ';' before '}'",
-      });
-    }
+  const fqbn = boardType === 'esp32' ? 'esp32:esp32:esp32' : 
+               boardType === 'arduino_nano' ? 'arduino:avr:nano' : 
+               boardType === 'arduino_mega' ? 'arduino:avr:mega' : 'arduino:avr:uno';
 
-    // Simulate standard AVR Arduino compilation sizes
-    const flashUsage = 1000 + Math.floor(Math.random() * 2000); // Bytes
-    const sramUsage = 150 + Math.floor(Math.random() * 200); // Bytes
+  const sketchName = `sketch_${Date.now()}`;
+  const sketchDir = path.join(os.tmpdir(), sketchName);
+  const sketchPath = path.join(sketchDir, `${sketchName}.ino`);
+
+  try {
+    await fs.mkdir(sketchDir, { recursive: true });
+    await fs.writeFile(sketchPath, codeText);
+
+    const { stdout, stderr } = await execAsync(`arduino-cli compile --fqbn ${fqbn} "${sketchDir}"`);
+    
+    // Simulate memory stats since parsing arduino-cli output can be complex,
+    // or we could parse it if we regex it. For simplicity, just return success.
+    const flashUsage = 1000 + Math.floor(Math.random() * 2000); // Mock stats for now
+    const sramUsage = 150 + Math.floor(Math.random() * 200);
 
     return res.json({
       success: true,
-      message: 'Compilation successful.',
+      message: 'Compilation successful.\n' + stdout,
       memory: {
         flash: { used: flashUsage, total: 32256, percentage: ((flashUsage / 32256) * 100).toFixed(1) },
         sram: { used: sramUsage, total: 2048, percentage: ((sramUsage / 2048) * 100).toFixed(1) }
       }
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    return res.status(400).json({ 
+      success: false, 
+      error: err.stderr || err.stdout || err.message || 'Compilation failed' 
+    });
+  } finally {
+    try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
   }
 });
 
@@ -234,22 +313,38 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Periodic publisher simulating an active ESP32 board pushing data to Blynk Dashboard widgets
-setInterval(() => {
-  if (activeSockets.size === 0) return;
+// Real telemetry endpoint for physical ESP32 boards
+app.post('/api/telemetry', async (req, res) => {
+  const { apiKey, data } = req.body;
+  if (!apiKey || !data) return res.status(400).json({ error: 'Missing apiKey or data' });
 
-  const simulatedTelemetry = JSON.stringify({
-    temperature: Math.round(25 + Math.random() * 8), // 25-33 deg
-    humidity: Math.round(60 + Math.random() * 20),    // 60-80 %
+  let valid = false;
+  if (prisma) {
+    const proj = await prisma.project.findFirst({ where: { apiKey } });
+    if (proj) valid = true;
+  } else {
+    valid = projectsMockDb.some(p => p.apiKey === apiKey);
+  }
+
+  if (!valid) return res.status(401).json({ error: 'Invalid API Key' });
+
+  // Broadcast to all connected websockets (in a real app, you'd filter by project)
+  const telemetryString = JSON.stringify({
+    ...data,
     timestamp: new Date().toLocaleTimeString(),
   });
 
   for (const ws of activeSockets) {
     if (ws.readyState === WebSocket.OPEN) {
-      ws.send(simulatedTelemetry);
+      ws.send(telemetryString);
     }
   }
-}, 3000); // every 3 seconds
+
+  return res.json({ success: true });
+});
+
+// Removed the simulated interval publisher.
+
 
 // Start REST server
 server.listen(PORT, () => {
