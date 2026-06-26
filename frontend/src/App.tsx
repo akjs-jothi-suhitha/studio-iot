@@ -85,6 +85,8 @@ export const App: React.FC = () => {
     if (tool === 'wire') {
       setPendingComponentType(null);
       setManualWireColor(false);
+      setSelectedId(null);
+      setIsWireSelected(false);
     } else if (tool === 'select') {
       setPendingComponentType(null);
     }
@@ -621,7 +623,6 @@ export const App: React.FC = () => {
               }}
               activeWireColor={activeWireColor}
               onChangeWireColor={handleChangeWireColor}
-              onUpdateWire={handleUpdateWire}
               wireMode={canvasTool === 'wire'}
               manualWireColor={manualWireColor}
               isSimulating={isSimulating}
@@ -646,6 +647,9 @@ export const App: React.FC = () => {
             <PropertiesPanel
               selectedComponent={selectedComponent}
               selectedWire={selectedWire}
+              wireMode={canvasTool === 'wire' && !isSimulating}
+              activeWireColor={activeWireColor}
+              onChangeWireColor={handleChangeWireColor}
               onUpdateComponent={handleUpdateComponent}
               onUpdateWire={handleUpdateWire}
               onDeleteSelected={handleDeleteSelected}

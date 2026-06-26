@@ -139,7 +139,7 @@ export const ComponentSidebar: React.FC<ComponentSidebarProps> = ({
         </div>
         {canvasTool === 'wire' && !isSimulating && (
           <p className="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-900">
-            Click a pin, then click another pin to connect. Pick wire color in the workplane header.
+            Click a pin, then click another pin to connect. Wire color options appear in the panel below the workplane.
           </p>
         )}
       </div>

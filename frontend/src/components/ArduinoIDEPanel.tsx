@@ -209,16 +209,10 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
 
     setUploading(true);
     setActiveTab('output');
-    appendOutput(`[Upload] Compiling…`);
+    appendOutput(`[Upload] Compiling and uploading to ${selectedPort}…`);
     try {
-      const compileBoard = activeBoardComp?.type === 'esp32' ? 'esp32' : boardType;
-      const compileResult = await api.compile(activeCode, compileBoard);
-      if (!compileResult.success) {
-        appendOutput(`[Upload] ✗ Compile failed: ${compileResult.error}`);
-        return;
-      }
-      appendOutput(`[Upload] ✓ Compile OK. Uploading to ${selectedPort}…`);
-      const uploadResult = await api.upload(activeCode, boardType, selectedPort);
+      const uploadBoard = activeBoardComp?.type === 'esp32' ? 'esp32' : boardType;
+      const uploadResult = await api.upload(activeCode, uploadBoard, selectedPort);
       if (uploadResult.success) {
         appendOutput(`[Upload] ✓ ${uploadResult.message || 'Done!'}`);
       } else {

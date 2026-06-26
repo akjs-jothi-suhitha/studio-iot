@@ -39,6 +39,21 @@ async function getArduinoCli(): Promise<string | null> {
   return cachedCliPath;
 }
 
+function resolveFqbn(boardType?: string): string {
+  if (boardType === 'esp32') return 'esp32:esp32:esp32';
+  if (boardType === 'arduino_nano') return 'arduino:avr:nano';
+  if (boardType === 'arduino_mega') return 'arduino:avr:mega';
+  return 'arduino:avr:uno';
+}
+
+async function createSketchDir(codeText: string): Promise<string> {
+  const sketchName = `sketch_${Date.now()}`;
+  const sketchDir = path.join(os.tmpdir(), sketchName);
+  await fs.mkdir(sketchDir, { recursive: true });
+  await fs.writeFile(path.join(sketchDir, `${sketchName}.ino`), codeText);
+  return sketchDir;
+}
+
 // Initialize Express
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -250,18 +265,12 @@ app.post('/api/upload', async (req, res) => {
   if (!codeText) return res.status(400).json({ success: false, error: 'Source code is required' });
   if (!port) return res.status(400).json({ success: false, error: 'No port selected' });
 
-  const fqbn = boardType === 'esp32' ? 'esp32:esp32:esp32' : 
-               boardType === 'arduino_nano' ? 'arduino:avr:nano' : 
-               boardType === 'arduino_mega' ? 'arduino:avr:mega' : 'arduino:avr:uno';
-
-  const sketchName = `sketch_${Date.now()}`;
-  const sketchDir = path.join(os.tmpdir(), sketchName);
-  const sketchPath = path.join(sketchDir, `${sketchName}.ino`);
+  const fqbn = resolveFqbn(boardType);
+  let sketchDir = '';
 
   try {
-    await fs.mkdir(sketchDir, { recursive: true });
-    await fs.writeFile(sketchPath, codeText);
-    
+    sketchDir = await createSketchDir(codeText);
+
     const cli = await getArduinoCli();
     if (!cli) {
       return res.status(400).json({
@@ -270,6 +279,7 @@ app.post('/api/upload', async (req, res) => {
       });
     }
 
+    await execAsync(`"${cli}" compile --fqbn ${fqbn} "${sketchDir}"`);
     const { stdout } = await execAsync(`"${cli}" upload -p ${port} --fqbn ${fqbn} "${sketchDir}"`);
     return res.json({
       success: true,
@@ -278,8 +288,9 @@ app.post('/api/upload', async (req, res) => {
   } catch (err: any) {
     return res.status(500).json({ success: false, error: err.message || err.stderr || 'Upload failed' });
   } finally {
-    // Cleanup
-    try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
+    if (sketchDir) {
+      try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
+    }
   }
 });
 
@@ -308,17 +319,11 @@ app.post('/api/compile', async (req, res) => {
     return res.status(400).json({ error: 'Source code is required for compilation' });
   }
 
-  const fqbn = boardType === 'esp32' ? 'esp32:esp32:esp32' : 
-               boardType === 'arduino_nano' ? 'arduino:avr:nano' : 
-               boardType === 'arduino_mega' ? 'arduino:avr:mega' : 'arduino:avr:uno';
-
-  const sketchName = `sketch_${Date.now()}`;
-  const sketchDir = path.join(os.tmpdir(), sketchName);
-  const sketchPath = path.join(sketchDir, `${sketchName}.ino`);
+  const fqbn = resolveFqbn(boardType);
+  let sketchDir = '';
 
   try {
-    await fs.mkdir(sketchDir, { recursive: true });
-    await fs.writeFile(sketchPath, codeText);
+    sketchDir = await createSketchDir(codeText);
 
     const cli = await getArduinoCli();
     if (!cli) {
@@ -349,7 +354,9 @@ app.post('/api/compile', async (req, res) => {
       error: err.stderr || err.stdout || err.message || 'Compilation failed' 
     });
   } finally {
-    try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
+    if (sketchDir) {
+      try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
+    }
   }
 });
 

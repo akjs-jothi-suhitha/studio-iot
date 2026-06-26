@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ComponentInstance, ComponentType, Wire } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
 import { findNearestPin, getPinAbsoluteCoords, collectPinHits, findPinDefinition } from '../utils/pinCoords';
-import { buildWirePath, getPinHighlightColor, suggestWireColor, WIRE_COLORS, wireLaneIndex } from '../utils/wireUtils';
+import { buildWirePath, getPinHighlightColor, suggestWireColor, wireLaneIndex } from '../utils/wireUtils';
 import { getSelectionBoundsForInstance } from '../utils/componentBounds';
 import { RealisticComponent } from './RealisticComponent';
 import { SimulationSensorPanel } from './SimulationSensorPanel';
@@ -16,7 +16,6 @@ interface CanvasProps {
   onUpdateWires: (wires: Wire[]) => void;
   activeWireColor: string;
   onChangeWireColor: (color: string, manual?: boolean) => void;
-  onUpdateWire?: (id: string, updates: Partial<Wire>) => void;
   isSimulating: boolean;
   ledStates: Record<string, boolean>;
   ledWarnings: Record<string, string>;
@@ -55,7 +54,6 @@ export const Canvas: React.FC<CanvasProps> = ({
   onUpdateWires,
   activeWireColor,
   onChangeWireColor,
-  onUpdateWire,
   isSimulating,
   ledStates,
   ledWarnings,
@@ -91,8 +89,6 @@ export const Canvas: React.FC<CanvasProps> = ({
   const draggedSnapshotRef = useRef<ComponentInstance[] | null>(null);
 
   const isWiring = Boolean(activeWiringSrc);
-  const selectedWire = selectedId ? wires.find((w) => w.id === selectedId) : null;
-  const showWireColors = !isSimulating && (wireMode || isWiring || Boolean(selectedWire));
 
   const pendingPreview = useMemo(() => {
     if (!pendingComponentType) {
@@ -563,30 +559,6 @@ export const Canvas: React.FC<CanvasProps> = ({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {showWireColors && (
-            <div className="mr-2 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1">
-              <span className="text-[10px] font-semibold uppercase text-slate-400">Wire</span>
-              {WIRE_COLORS.map((color) => {
-                const active = selectedWire ? selectedWire.color === color.hex : activeWireColor === color.hex;
-                return (
-                  <button
-                    key={color.hex}
-                    type="button"
-                    title={color.name}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onChangeWireColor(color.hex, true);
-                      if (selectedWire && onUpdateWire) {
-                        onUpdateWire(selectedWire.id, { color: color.hex });
-                      }
-                    }}
-                    className={`h-5 w-5 rounded-full border-2 transition ${active ? 'border-slate-800 scale-110' : 'border-slate-200 hover:scale-105'}`}
-                    style={{ backgroundColor: color.hex }}
-                  />
-                );
-              })}
-            </div>
-          )}
           <button onClick={() => setZoom(Math.max(20, zoom - 10))} className="rounded bg-white px-2 py-1 shadow-sm">−</button>
           <span className="min-w-12 text-center font-mono">{zoom}%</span>
           <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="rounded border border-slate-200 bg-white px-2 py-1 shadow-sm">+</button>
@@ -622,8 +594,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
       <svg className="relative z-10 h-full w-full" style={{ overflow: 'visible' }}>
         <g transform={`translate(${panX}, ${panY + 44}) scale(${zoom / 100})`}>
-          {wires.map(renderWire)}
           {renderComponentLayer()}
+          {wires.map(renderWire)}
           {renderPinHighlights()}
           {renderActiveWire()}
           {pendingPreview && (

@@ -10,7 +10,7 @@ interface SimulationSensorPanelProps {
   isSimulating: boolean;
 }
 
-const SENSOR_TYPES = ['gas_sensor', 'ldr', 'ultrasonic', 'dht11'] as const;
+const SENSOR_TYPES = ['gas_sensor', 'ldr', 'ultrasonic', 'dht11', 'potentiometer'] as const;
 
 export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
   components,
@@ -67,6 +67,16 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
           unit: '',
           color: 'from-rose-500/20 to-orange-500/20',
           hint: 'Adjust temperature and humidity below',
+        };
+      case 'potentiometer':
+        return {
+          icon: Gauge,
+          label: 'Analog Value (A2)',
+          min: 0,
+          max: 1023,
+          unit: '',
+          color: 'from-cyan-500/20 to-blue-500/20',
+          hint: 'Sets analogRead(A2) during simulation — use slider or type a value',
         };
       default:
         return {
@@ -175,6 +185,22 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
                 onChange={(e) => onValueChange(comp.id, Number(e.target.value))}
                 className="h-2 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-cyan-600"
               />
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  type="number"
+                  min={config.min}
+                  max={config.max}
+                  value={value}
+                  onChange={(e) => {
+                    const next = Math.max(config.min, Math.min(config.max, Number(e.target.value) || 0));
+                    onValueChange(comp.id, next);
+                  }}
+                  className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs font-mono outline-none focus:border-cyan-500"
+                />
+                <span className="text-[10px] text-slate-500">
+                  {config.min} – {config.max}{config.unit ? ` ${config.unit}` : ''}
+                </span>
+              </div>
               {config.hint && <p className="mt-1 text-[9px] text-slate-500">{config.hint}</p>}
               {comp.type === 'gas_sensor' && value > 300 && (
                 <div className="mt-2 flex items-center gap-1 text-[10px] font-semibold text-orange-600">
@@ -187,7 +213,7 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
         })}
       </div>
       <p className="border-t border-slate-100 bg-slate-50 px-3 py-2 text-[9px] text-slate-500">
-        Components are locked during simulation. Use potentiometer & buttons on the workplane.
+        Components are locked during simulation. Adjust values here; use push buttons on the workplane.
       </p>
     </div>
   );

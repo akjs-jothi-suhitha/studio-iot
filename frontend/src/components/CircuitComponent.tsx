@@ -44,6 +44,11 @@ const buildWokwiProps = (
         ledRX: false,
         ledTX: false,
       };
+    case 'esp32':
+      return {
+        ledPower: isSimulating,
+        led1: false,
+      };
     case 'led':
       return {
         value: ledState,
@@ -124,21 +129,6 @@ const WokwiElementHost: React.FC<{
       };
     }
 
-    if (instance.type === 'potentiometer') {
-      const onInput = (event: Event) => {
-        const target = event.target as { value?: number };
-        if (typeof target.value === 'number') {
-          onValueChange?.(instance.id, target.value);
-        }
-      };
-      element.addEventListener('input', onInput);
-      host.appendChild(element);
-      return () => {
-        element.removeEventListener('input', onInput);
-        if (host.contains(element)) host.removeChild(element);
-      };
-    }
-
     host.appendChild(element);
     return () => {
       if (host.contains(element)) host.removeChild(element);
@@ -148,7 +138,7 @@ const WokwiElementHost: React.FC<{
   return (
     <div
       ref={hostRef}
-      style={{ width, height, pointerEvents: instance.type === 'push_button' || instance.type === 'potentiometer' ? 'auto' : 'none' }}
+      style={{ width, height, pointerEvents: instance.type === 'push_button' ? 'auto' : 'none' }}
     />
   );
 };
