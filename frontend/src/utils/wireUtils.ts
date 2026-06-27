@@ -46,9 +46,13 @@ export interface SmartWireOptions {
   obstacles?: ObstacleRect[];
   /** Other wire paths for jump-over rendering */
   crossingPaths?: string[];
+  /** Directional stub from source pin (avoids routing across entire pin header) */
+  fromStub?: { dx: number; dy: number };
+  /** Directional stub toward destination pin */
+  toStub?: { dx: number; dy: number };
 }
 
-const STUB = 22;
+const STUB = 14;
 const LANE_SPACING = 12;
 const CORNER_RADIUS = 8;
 const OBSTACLE_PAD = 10;
@@ -73,17 +77,33 @@ const segmentIntersectsRect = (a: Point, b: Point, r: ObstacleRect): boolean => 
   return false;
 };
 
+const stubPoint = (p: Point, stub: { dx: number; dy: number } | undefined, scale: number): Point => {
+  if (!stub) return p;
+  const len = Math.hypot(stub.dx, stub.dy) || 1;
+  return {
+    x: p.x + (stub.dx / len) * scale,
+    y: p.y + (stub.dy / len) * scale,
+  };
+};
+
 /** Manhattan path as orthogonal waypoints */
-const manhattanWaypoints = (from: Point, to: Point, lane: number, obstacles: ObstacleRect[]): Point[] => {
+const manhattanWaypoints = (
+  from: Point,
+  to: Point,
+  lane: number,
+  obstacles: ObstacleRect[],
+  fromStub?: { dx: number; dy: number },
+  toStub?: { dx: number; dy: number },
+): Point[] => {
   const laneOffset = ((lane % 9) - 4) * LANE_SPACING;
-  const exitY = from.y + (to.y >= from.y ? STUB : -STUB);
-  const entryY = to.y + (to.y >= from.y ? -STUB : STUB);
+  const fromExit = stubPoint(from, fromStub, STUB);
+  const toEntry = stubPoint(to, toStub, STUB);
 
   const candidates: Point[][] = [
-    [from, { x: from.x, y: exitY }, { x: to.x, y: exitY }, { x: to.x, y: entryY }, to],
-    [from, { x: from.x, y: exitY }, { x: from.x + laneOffset, y: exitY }, { x: from.x + laneOffset, y: entryY }, { x: to.x, y: entryY }, to],
-    [from, { x: from.x, y: from.y + laneOffset }, { x: to.x, y: from.y + laneOffset }, to],
-    [from, { x: from.x, y: exitY }, { x: (from.x + to.x) / 2 + laneOffset, y: exitY }, { x: (from.x + to.x) / 2 + laneOffset, y: entryY }, { x: to.x, y: entryY }, to],
+    [from, fromExit, { x: toEntry.x, y: fromExit.y }, toEntry, to],
+    [from, fromExit, { x: fromExit.x + laneOffset, y: fromExit.y }, { x: fromExit.x + laneOffset, y: toEntry.y }, toEntry, to],
+    [from, fromExit, { x: fromExit.x, y: fromExit.y + laneOffset }, { x: toEntry.x, y: fromExit.y + laneOffset }, toEntry, to],
+    [from, fromExit, { x: (fromExit.x + toEntry.x) / 2 + laneOffset, y: fromExit.y }, { x: (fromExit.x + toEntry.x) / 2 + laneOffset, y: toEntry.y }, toEntry, to],
   ];
 
   const scorePath = (pts: Point[]): number => {
@@ -167,7 +187,7 @@ export const buildWirePath = (
   }
 
   const obstacles = options.obstacles || [];
-  const waypoints = manhattanWaypoints(from, to, lane, obstacles);
+  const waypoints = manhattanWaypoints(from, to, lane, obstacles, options.fromStub, options.toStub);
   return waypointsToRoundedPath(waypoints);
 };
 

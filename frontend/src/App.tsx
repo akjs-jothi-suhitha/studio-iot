@@ -10,9 +10,9 @@ import { LoginScreen } from './components/LoginScreen';
 import { ProjectsDashboard } from './components/ProjectsDashboard';
 import { CODE_PRESETS } from './utils/codePresets';
 import { COMPONENT_DEFINITIONS } from './utils/componentDefinitions';
-import { parseBoardCodes, serializeBoardCodes, getProgrammableBoardIds, BoardCodeFiles, defaultSketchForBoard, boardTypeFromComponent } from './utils/boardCodes';
+import { parseBoardCodes, serializeBoardCodes, getProgrammableBoardIds, BoardCodeFiles, defaultSketchForBoard, boardTypeFromComponent, ESP32_HIVEMQ_SKETCH } from './utils/boardCodes';
 import { suggestCodeForBoard } from './utils/componentCodeSnippets';
-import { ComponentType, ComponentInstance, Wire, DashboardWidget, ProjectState, ViewMode, BoardType, BlynkDatastream } from './types';
+import { ComponentType, ComponentInstance, Wire, DashboardWidget, ProjectState, ViewMode, BoardType, BlynkDatastream, CloudMqttConfig } from './types';
 import { CircuitSimulator, SimulationState } from './simulation/circuitSimulator';
 import { api, ProjectRecord, User } from './services/api';
 
@@ -50,6 +50,7 @@ export const App: React.FC = () => {
   const [widgets, setWidgets] = useState<DashboardWidget[]>([]);
   const [datastreams, setDatastreams] = useState<BlynkDatastream[]>([]);
   const [dashboardSetupStep, setDashboardSetupStep] = useState(0);
+  const [cloudMqttConfig, setCloudMqttConfig] = useState<CloudMqttConfig>({ brokerUrl: '', username: '', password: '' });
 
   const [isSimulating, setIsSimulating] = useState(false);
   const [ledStates, setLedStates] = useState<Record<string, boolean>>({});
@@ -121,14 +122,14 @@ export const App: React.FC = () => {
         boardType,
         circuitJson: JSON.stringify({ components, wires }),
         codeText: serializeBoardCodes(boardCodes),
-        widgetsJson: JSON.stringify({ widgets, datastreams, setupStep: dashboardSetupStep }),
+        widgetsJson: JSON.stringify({ widgets, datastreams, setupStep: dashboardSetupStep, cloudMqttConfig }),
       });
       isDirtyRef.current = false;
       setSaveStatus('saved');
     } catch {
       setSaveStatus('unsaved');
     }
-  }, [projectId, projectName, boardType, components, wires, boardCodes, widgets, datastreams, dashboardSetupStep]);
+  }, [projectId, projectName, boardType, components, wires, boardCodes, widgets, datastreams, dashboardSetupStep, cloudMqttConfig]);
 
   useEffect(() => {
     if (!projectId || phase !== 'editor') return;
@@ -140,7 +141,7 @@ export const App: React.FC = () => {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [components, wires, boardCodes, widgets, datastreams, dashboardSetupStep, boardType, projectName, projectId, phase, saveProject]);
+  }, [components, wires, boardCodes, widgets, datastreams, dashboardSetupStep, cloudMqttConfig, boardType, projectName, projectId, phase, saveProject]);
 
   useEffect(() => {
     simulatorRef.current = new CircuitSimulator((state: SimulationState) => {
@@ -195,15 +196,18 @@ export const App: React.FC = () => {
         setWidgets(parsed);
         setDatastreams(DEFAULT_DATASTREAMS);
         setDashboardSetupStep(parsed.length > 0 ? 4 : 0);
+        setCloudMqttConfig({ brokerUrl: '', username: '', password: '' });
       } else {
         setWidgets(parsed.widgets || []);
         setDatastreams(parsed.datastreams?.length ? parsed.datastreams : DEFAULT_DATASTREAMS);
         setDashboardSetupStep(parsed.setupStep ?? 0);
+        setCloudMqttConfig(parsed.cloudMqttConfig || { brokerUrl: '', username: '', password: '' });
       }
     } catch {
       setWidgets([]);
       setDatastreams(DEFAULT_DATASTREAMS);
       setDashboardSetupStep(0);
+      setCloudMqttConfig({ brokerUrl: '', username: '', password: '' });
     }
 
     setSelectedId(null);
@@ -232,17 +236,19 @@ export const App: React.FC = () => {
   const loadTemplatePreset = (key: string) => {
     const template = CODE_PRESETS[key];
     if (!template) return;
+    const code = key === 'gas_alarm_iot' ? ESP32_HIVEMQ_SKETCH : template.code;
     setComponents(template.components);
     setWires(template.wires);
-    setBoardCodes(parseBoardCodes(template.code, getProgrammableBoardIds(template.components), template.components));
+    setBoardCodes(parseBoardCodes(code, getProgrammableBoardIds(template.components), template.components));
     setWidgets(template.widgets || []);
+    setBoardType(key === 'gas_alarm_iot' ? 'esp32' : 'arduino_uno');
     setSelectedId(null);
     setIsWireSelected(false);
     setPendingComponentType(null);
     const stateSnapshot: ProjectState = {
       components: template.components,
       wires: template.wires,
-      code: template.code,
+      code: code,
       widgets: template.widgets || [],
     };
     setHistory([stateSnapshot]);
@@ -261,9 +267,7 @@ export const App: React.FC = () => {
           ? `Arduino Nano ${components.filter((c) => c.type === 'arduino_nano').length + 1}`
           : type === 'esp32'
             ? `ESP32 ${components.filter((c) => c.type === 'esp32').length + 1}`
-            : type === 'esp8266'
-              ? `ESP8266 ${components.filter((c) => c.type === 'esp8266').length + 1}`
-              : `${COMPONENT_DEFINITIONS[type]?.name || type} ${components.length + 1}`,
+            : `${COMPONENT_DEFINITIONS[type]?.name || type} ${components.length + 1}`,
     x,
     y,
     rotation: 0,
@@ -297,14 +301,13 @@ export const App: React.FC = () => {
     setIsWireSelected(false);
     setPendingComponentType(null);
 
-    if (type === 'arduino_uno' || type === 'arduino_nano' || type === 'esp32' || type === 'esp8266') {
+    if (type === 'arduino_uno' || type === 'arduino_nano' || type === 'esp32') {
       const suggested = suggestCodeForBoard(newComp.id, nextComps, wires);
       setBoardCodes((prev) => ({
         activeBoardId: newComp.id,
         files: { ...prev.files, [newComp.id]: suggested },
       }));
       if (type === 'esp32') setBoardType('esp32');
-      else if (type === 'esp8266') setBoardType('esp8266');
       else if (type === 'arduino_nano') setBoardType('arduino_nano');
     }
 
@@ -419,18 +422,7 @@ export const App: React.FC = () => {
     const errors: string[] = [];
     const boardIds = getProgrammableBoardIds(components);
     const hasBoard = boardIds.length > 0;
-    const hasPower = components.some((c) =>
-      ['battery_9v', 'battery_aa', 'battery_coin'].includes(c.type),
-    );
     if (!hasBoard) errors.push('Add a board (Arduino Uno/Nano, ESP32, or ESP8266) to the circuit.');
-    if (!hasPower && wires.length > 0) {
-      const hasPowerWire = wires.some((w) => {
-        const fromPin = w.fromPinId;
-        const toPin = w.toPinId;
-        return fromPin.includes('5v') || fromPin.includes('vin') || toPin.includes('5v') || toPin.includes('plus');
-      });
-      if (!hasPowerWire) errors.push('Connect power (5V/VIN or battery) to run the circuit.');
-    }
     boardIds.forEach((id) => {
       const code = boardCodes.files[id] || '';
       const comp = components.find((c) => c.id === id);
@@ -560,7 +552,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#272c36] font-sans text-slate-100 antialiased">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 font-sans text-slate-900 antialiased">
       <Toolbar
         viewMode={viewMode}
         onChangeViewMode={setViewMode}
@@ -613,7 +605,7 @@ export const App: React.FC = () => {
               }
               if (id && !isWire) {
                 const comp = components.find((c) => c.id === id);
-                if (comp && (comp.type === 'arduino_uno' || comp.type === 'arduino_nano' || comp.type === 'esp32' || comp.type === 'esp8266')) {
+                if (comp && (comp.type === 'arduino_uno' || comp.type === 'arduino_nano' || comp.type === 'esp32')) {
                   setBoardCodes((prev) => ({ ...prev, activeBoardId: id }));
                 }
               }
@@ -675,6 +667,20 @@ export const App: React.FC = () => {
           </>
         )}
 
+        {viewMode === 'arduino' && (
+          <ArduinoIDEPanel
+            boardCodes={boardCodes}
+            onChangeBoardCodes={handleBoardCodesChange}
+            serialLogs={serialLogs}
+            onClearSerial={() => setSerialLogs([])}
+            boardType={boardType}
+            onChangeBoardType={(b) => setBoardType(b as BoardType)}
+            components={components}
+            wires={wires}
+            isSimulating={isSimulating}
+          />
+        )}
+
         {viewMode === 'dashboard' && (
           <DashboardPanel
             widgets={widgets}
@@ -699,24 +705,12 @@ export const App: React.FC = () => {
             isSimulating={isSimulating}
             onWidgetInteraction={handleWidgetInteraction}
             apiKey={projectApiKey}
-            onChangeViewMode={setViewMode}
-          />
-        )}
-
-        {viewMode === 'arduino' && (
-          <ArduinoIDEPanel
-            boardCodes={boardCodes}
-            onChangeBoardCodes={handleBoardCodesChange}
-            serialLogs={serialLogs}
-            onClearSerial={() => setSerialLogs([])}
-            boardType={boardType}
-            onChangeBoardType={(b) => {
-              setBoardType(b as BoardType);
+            cloudMqttConfig={cloudMqttConfig}
+            onUpdateCloudMqttConfig={(config) => {
+              setCloudMqttConfig(config);
               markDirty();
             }}
-            components={components}
-            wires={wires}
-            isSimulating={isSimulating}
+            onChangeViewMode={setViewMode}
           />
         )}
       </div>

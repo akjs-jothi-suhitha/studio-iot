@@ -14,7 +14,8 @@ interface CodePanelProps {
 
 const TEMPLATES = [
   { key: 'blink', label: 'Blink — LED on pin 13' },
-  { key: 'gas_alarm', label: 'Gas alarm sensor' },
+  { key: 'gas_alarm', label: 'Gas alarm (Tinkercad)' },
+  { key: 'gas_alarm_iot', label: 'Gas alarm + HiveMQ (ESP32)' },
   { key: 'light_control', label: 'Light control with LDR' },
 ];
 
@@ -125,7 +126,7 @@ export const CodePanel: React.FC<CodePanelProps> = ({
             language="cpp"
             value={code}
             onChange={(value) => onChangeCode(value || '')}
-            theme="vs"
+            theme="vs-dark"
             options={{
               readOnly: isSimulating,
               minimap: { enabled: false },

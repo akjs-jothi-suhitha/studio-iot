@@ -102,6 +102,16 @@ export const SvgComponent: React.FC<RealisticComponentProps> = ({
         return (
           <g>
             <rect width={width} height={height} rx="4" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+            
+            {/* Top row pins */}
+            {Array.from({ length: 15 }).map((_, i) => (
+              <circle key={`t${i}`} cx={8 + i * 10} cy="8" r="3" fill="#eab308" stroke="#ca8a04" strokeWidth="0.5" />
+            ))}
+            {/* Bottom row pins */}
+            {Array.from({ length: 15 }).map((_, i) => (
+              <circle key={`b${i}`} cx={8 + i * 10} cy="112" r="3" fill="#eab308" stroke="#ca8a04" strokeWidth="0.5" />
+            ))}
+
             <rect x="60" y="20" width="80" height="80" rx="2" fill="#334155" stroke="#475569" strokeWidth="1" />
             <rect x="68" y="28" width="64" height="64" rx="1" fill="#0f172a" />
             <text x="100" y="58" fill="#94a3b8" fontSize="8" fontWeight="bold" textAnchor="middle">ESP32</text>

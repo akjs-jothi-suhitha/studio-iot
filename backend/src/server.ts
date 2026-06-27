@@ -11,6 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
+import { getMqttStatus, publishMqttCommand, startMqttBridge, stopMqttBridge } from './mqttBridge';
 
 dotenv.config();
 
@@ -60,10 +61,28 @@ async function getArduinoCli(): Promise<string | null> {
 
 function resolveFqbn(boardType?: string): string {
   if (boardType === 'esp32') return 'esp32:esp32:esp32';
-  if (boardType === 'esp8266') return 'esp8266:esp8266:nodemcuv2';
   if (boardType === 'arduino_nano') return 'arduino:avr:nano:cpu=atmega328old';
   if (boardType === 'arduino_mega') return 'arduino:avr:mega';
   return 'arduino:avr:uno';
+}
+
+function formatCompileError(raw: string, boardType?: string): string {
+  if (/bad CPU type in executable/i.test(raw)) {
+    return [
+      'Arduino AVR toolchain error.',
+      '',
+      'Fix options:',
+      '1. Use ESP32 board instead (recommended for IoT + HiveMQ) — select ESP32 Dev Module.',
+      '2. Reinstall tools: cd backend && npm run install:arduino-cli',
+      '3. Or run: arduino-cli core upgrade arduino:avr',
+      '',
+      `Original error: ${raw.split('\n')[0]}`,
+    ].join('\n');
+  }
+  if (/esp32/i.test(boardType || '') && /PubSubClient|WiFi\.h/i.test(raw)) {
+    return raw + '\n\nTip: Install PubSubClient via Library Manager for HiveMQ sketches.';
+  }
+  return raw;
 }
 
 const ensuredCores = new Set<string>();
@@ -77,10 +96,13 @@ async function ensureBoardCore(cli: string, boardType?: string): Promise<void> {
     await execAsync(`"${cli}" core update-index`);
     if (boardType === 'esp32') {
       await execAsync(`"${cli}" core install esp32:esp32`);
-    } else if (boardType === 'esp8266') {
-      await execAsync(`"${cli}" core install esp8266:esp8266`);
     } else if (boardType?.startsWith('arduino')) {
       await execAsync(`"${cli}" core install arduino:avr`);
+      try {
+        await execAsync(`"${cli}" core upgrade arduino:avr`);
+      } catch {
+        /* upgrade optional */
+      }
     }
     ensuredCores.add(coreKey);
   } catch (err) {
@@ -286,8 +308,39 @@ app.get('/api/boards', (_req, res) => {
     { id: 'arduino_nano', name: 'Arduino Nano', fqbn: 'arduino:avr:nano:cpu=atmega328old' },
     { id: 'arduino_mega', name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega' },
     { id: 'esp32', name: 'ESP32 Dev Module', fqbn: 'esp32:esp32:esp32' },
-    { id: 'esp8266', name: 'ESP8266 NodeMCU', fqbn: 'esp8266:esp8266:nodemcuv2' },
   ]);
+});
+
+app.get('/api/mqtt/status', (_req, res) => {
+  return res.json(getMqttStatus());
+});
+
+app.post('/api/mqtt/start', (req, res) => {
+  const { brokerUrl, username, password } = req.body as {
+    brokerUrl?: string;
+    username?: string;
+    password?: string;
+  };
+
+  if (!brokerUrl?.trim() || !username?.trim() || !password?.trim()) {
+    return res.status(400).json({
+      connected: false,
+      message: 'Enter HiveMQ broker URL, username, and password for this project.',
+    });
+  }
+
+  startMqttBridge({
+    brokerUrl,
+    username,
+    password,
+    broadcast: broadcastTelemetry,
+  });
+  return res.json(getMqttStatus());
+});
+
+app.post('/api/mqtt/pause', (_req, res) => {
+  stopMqttBridge();
+  return res.json(getMqttStatus());
 });
 
 // Serial port discovery using serialport package
@@ -296,7 +349,7 @@ app.get('/api/ports', async (_req, res) => {
     const ports = await SerialPort.list();
     const formattedPorts = ports.map(p => ({
       id: p.path,
-      label: `${p.path} — ${p.manufacturer || p.friendlyName || 'Unknown Device'}`,
+      label: `${p.path} — ${p.manufacturer || 'Unknown Device'}`,
       connected: true,
     }));
     return res.json(formattedPorts);
@@ -334,7 +387,7 @@ app.post('/api/upload', async (req, res) => {
       message: `Sketch uploaded to ${boardType || 'arduino_uno'} on ${port}\n${stdout}`,
     });
   } catch (err: unknown) {
-    return res.status(500).json({ success: false, error: extractCliError(err) });
+    return res.status(500).json({ success: false, error: formatCompileError(extractCliError(err), boardType) });
   } finally {
     if (sketchDir) {
       try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
@@ -400,7 +453,7 @@ app.post('/api/compile', async (req, res) => {
   } catch (err: unknown) {
     return res.status(400).json({
       success: false,
-      error: extractCliError(err),
+      error: formatCompileError(extractCliError(err), boardType),
     });
   } finally {
     if (sketchDir) {
@@ -422,10 +475,10 @@ app.post('/api/ai/generate', async (req, res) => {
     return res.status(400).json({ error: 'Prompt is required' });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return res.status(503).json({
-      error: 'OPENAI_API_KEY is not configured. Add it to backend/.env (see backend/.env.example).',
+      error: 'GEMINI_API_KEY is not configured. Add it to backend/.env (see backend/.env.example).',
     });
   }
 
@@ -448,30 +501,25 @@ Rules:
     ? `Existing code:\n${existingCode}\n\nUser request: ${prompt}`
     : prompt;
 
-  const apiBase = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
-
   try {
-    const response = await fetch(`${apiBase}/chat/completions`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent },
+        system_instruction: { parts: { text: systemPrompt } },
+        contents: [
+          { role: 'user', parts: [{ text: userContent }] }
         ],
-        temperature: 0.3,
-        max_tokens: 2048,
+        generationConfig: {
+          temperature: 0.3,
+          maxOutputTokens: 2048,
+        },
       }),
     });
 
-    const data = await response.json() as {
-      error?: { message?: string };
-      choices?: Array<{ message?: { content?: string } }>;
-    };
+    const data = await response.json() as any;
 
     if (!response.ok) {
       return res.status(response.status).json({
@@ -479,7 +527,7 @@ Rules:
       });
     }
 
-    let code = data.choices?.[0]?.message?.content?.trim() || '';
+    let code = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     code = code.replace(/^```(?:cpp|arduino|c\+\+)?\n?/i, '').replace(/\n?```$/i, '').trim();
 
     if (!code) {
@@ -492,6 +540,79 @@ Rules:
   }
 });
 
+// AI chat — multi-turn conversation for Code Studio
+app.post('/api/ai/chat', async (req, res) => {
+  const { messages, boardType, components } = req.body as {
+    messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+    boardType?: string;
+    components?: string[];
+  };
+
+  if (!messages?.length) {
+    return res.status(400).json({ error: 'Messages array is required' });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: 'GEMINI_API_KEY is not configured. Add it to backend/.env.',
+    });
+  }
+
+  const board = boardType || 'esp32';
+  const componentList = Array.isArray(components) && components.length > 0
+    ? components.join(', ')
+    : 'IoT sensors and actuators';
+
+  const systemPrompt = `You are a friendly embedded systems tutor and coding assistant in Studio IoT.
+Board: ${board}
+Circuit components: ${componentList}
+Help users wire circuits, fix compile errors, configure HiveMQ MQTT, and write Arduino/ESP32 sketches.
+When generating code, wrap it in a \`\`\`cpp code block.
+For ESP32 cloud projects use HiveMQ (PubSubClient + WiFiClientSecure on port 8883).
+Keep answers concise and practical.`;
+
+  try {
+    const formattedMessages = messages.slice(-12).map((m) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }]
+    }));
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        system_instruction: { parts: { text: systemPrompt } },
+        contents: formattedMessages,
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 2048,
+        },
+      }),
+    });
+
+    const data = await response.json() as any;
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: data.error?.message || `AI request failed (${response.status})`,
+      });
+    }
+
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    if (!reply) {
+      return res.status(502).json({ error: 'AI returned empty response.' });
+    }
+
+    const codeMatch = reply.match(/```(?:cpp|arduino|c\+\+)?\n([\s\S]*?)```/i);
+    return res.json({ reply, code: codeMatch?.[1]?.trim() || null });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: extractCliError(err) });
+  }
+});
+
 // Create HTTP server
 const server = http.createServer(app);
 
@@ -499,11 +620,21 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ port: 8080 });
 console.log('WebSocket Server started on port 8080');
 
-const activeSockets = new Set<WebSocket>();
+const activeSockets = new Map<WebSocket, string | undefined>();
 
-wss.on('connection', (ws) => {
-  activeSockets.add(ws);
-  console.log('Telemetry WebSocket Client connected.');
+function broadcastTelemetry(payload: string, deviceId?: string) {
+  for (const [ws, apiKey] of activeSockets) {
+    if (ws.readyState !== WebSocket.OPEN) continue;
+    if (deviceId && apiKey && apiKey !== deviceId) continue;
+    ws.send(payload);
+  }
+}
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url || '', 'http://localhost');
+  const apiKey = url.searchParams.get('apiKey') || undefined;
+  activeSockets.set(ws, apiKey);
+  console.log('Telemetry WebSocket Client connected.', apiKey ? `(project ${apiKey.slice(0, 8)}…)` : '');
 
   ws.on('close', () => {
     activeSockets.delete(ws);
@@ -526,9 +657,8 @@ app.post('/api/blynk/command', async (req, res) => {
   if (!valid) return res.status(401).json({ error: 'Invalid API Key' });
 
   const payload = JSON.stringify({ [String(pin).toUpperCase()]: value, timestamp: new Date().toLocaleTimeString() });
-  for (const ws of activeSockets) {
-    if (ws.readyState === WebSocket.OPEN) ws.send(payload);
-  }
+  broadcastTelemetry(payload, apiKey);
+  publishMqttCommand(apiKey, { [String(pin).toLowerCase()]: value, led: value > 0 });
   return res.json({ success: true });
 });
 
@@ -553,11 +683,7 @@ app.post('/api/telemetry', async (req, res) => {
     timestamp: new Date().toLocaleTimeString(),
   });
 
-  for (const ws of activeSockets) {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(telemetryString);
-    }
-  }
+  broadcastTelemetry(telemetryString, apiKey);
 
   return res.json({ success: true });
 });
@@ -570,6 +696,8 @@ async function startServer() {
   await connectDatabase();
   server.listen(PORT, () => {
     console.log(`Express API Server listening on port ${PORT}`);
+    const mqtt = getMqttStatus();
+    console.log(`MQTT bridge: ${mqtt.connected ? 'connected' : mqtt.message}`);
   });
 }
 

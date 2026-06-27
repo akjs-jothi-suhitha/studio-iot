@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
-import { Bot, Send, Sparkles, X, Loader2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Bot, Send, Sparkles, X, Loader2, User, Copy } from 'lucide-react';
 import { api } from '../services/api';
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  code?: string | null;
+}
 
 interface AiAssistantProps {
   boardType: string;
@@ -17,123 +23,163 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({
   onApplyCode,
   onClose,
 }) => {
-  const [prompt, setPrompt] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      role: 'assistant',
+      content: `Hi! I'm your IoT coding assistant. I can help with wiring, HiveMQ MQTT setup, and ${boardType.replace(/_/g, ' ')} sketches. What would you like to build?`,
+    },
+  ]);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [lastGenerated, setLastGenerated] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const suggestions = [
-    'Blink built-in LED every second',
-    'Read DHT11 and print temperature to Serial',
-    'Control servo with potentiometer on A0',
-    'Connect to WiFi and send telemetry to cloud',
+    'Explain how to wire the gas sensor to ESP32',
+    'Fix my compile error',
+    'Add HiveMQ MQTT telemetry to my sketch',
+    'Blink LED and read sensor every 5 seconds',
   ];
 
-  const handleGenerate = async (text?: string) => {
-    const userPrompt = (text || prompt).trim();
-    if (!userPrompt) return;
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, loading]);
+
+  const sendMessage = async (text?: string) => {
+    const userText = (text || input).trim();
+    if (!userText || loading) return;
+
+    const userMsg: ChatMessage = { role: 'user', content: userText };
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
+    setInput('');
     setLoading(true);
     setError('');
+
     try {
-      const result = await api.aiGenerate({
-        prompt: userPrompt,
+      const contextMessages = nextMessages.map((m) => ({ role: m.role, content: m.content }));
+      if (existingCode?.trim() && contextMessages.length <= 2) {
+        contextMessages[contextMessages.length - 1].content += `\n\nCurrent sketch:\n${existingCode.slice(0, 1500)}`;
+      }
+
+      const result = await api.aiChat({
+        messages: contextMessages,
         boardType,
-        existingCode: existingCode || undefined,
         components: componentNames,
       });
-      setLastGenerated(result.code);
-      setPrompt('');
+
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: result.reply, code: result.code },
+      ]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI generation failed');
+      setError(err instanceof Error ? err.message : 'Chat failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex h-full w-80 shrink-0 flex-col border-l border-[#3c3c3c] bg-[#1a1a1a]">
-      <div className="flex shrink-0 items-center justify-between border-b border-[#3c3c3c] px-3 py-2.5">
+    <div className="flex h-full w-80 shrink-0 flex-col border-l border-slate-200 bg-white">
+      <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2.5">
         <div className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500">
             <Bot className="h-4 w-4 text-white" />
           </div>
           <div>
-            <div className="text-xs font-bold text-white">AI Code Bot</div>
+            <div className="text-xs font-bold text-slate-800">AI Chat</div>
             <div className="text-[10px] text-slate-500">{boardType.replace(/_/g, ' ')}</div>
           </div>
         </div>
-        <button type="button" onClick={onClose} className="rounded p-1 text-slate-500 hover:bg-[#2d2d2d] hover:text-white">
+        <button type="button" onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <p className="mb-3 text-[11px] leading-relaxed text-slate-400">
-          Describe what you want your sketch to do. The AI generates Arduino/ESP code based on your circuit components.
-        </p>
-
-        <div className="mb-3 space-y-1.5">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Quick prompts</div>
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => handleGenerate(s)}
-              disabled={loading}
-              className="flex w-full items-start gap-1.5 rounded-md border border-[#333] bg-[#252526] px-2 py-1.5 text-left text-[10px] text-slate-300 transition hover:border-violet-600/50 hover:bg-[#2d2d2d] disabled:opacity-50"
-            >
-              <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-violet-400" />
-              {s}
-            </button>
-          ))}
-        </div>
-
-        {error && (
-          <div className="mb-3 rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-2 text-[11px] text-red-300">
-            {error}
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-3 space-y-3 bg-slate-50">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex gap-2 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+              msg.role === 'user' ? 'bg-blue-600' : 'bg-violet-600'
+            }`}>
+              {msg.role === 'user' ? <User className="h-3 w-3 text-white" /> : <Bot className="h-3 w-3 text-white" />}
+            </div>
+            <div className={`max-w-[85%] rounded-lg px-2.5 py-2 text-[11px] leading-relaxed shadow-sm ${
+              msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 border border-slate-200'
+            }`}>
+              <div className="whitespace-pre-wrap">{msg.content}</div>
+              {msg.code && (
+                <div className="mt-2 border-t border-slate-200 pt-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-[9px] font-bold uppercase text-emerald-400">Code</span>
+                    <button
+                      type="button"
+                      onClick={() => onApplyCode(msg.code!)}
+                      className="flex items-center gap-1 rounded bg-emerald-700/60 px-1.5 py-0.5 text-[9px] text-emerald-200 hover:bg-emerald-700"
+                    >
+                      <Copy className="h-2.5 w-2.5" /> Insert
+                    </button>
+                  </div>
+                  <pre className="max-h-32 overflow-auto rounded bg-slate-100 p-1.5 font-mono text-[9px] text-slate-800">
+                    {msg.code.slice(0, 600)}{msg.code.length > 600 ? '...' : ''}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex items-center gap-2 text-[11px] text-slate-500">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Thinking...
           </div>
         )}
-
-        {lastGenerated && (
-          <div className="mb-3">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase text-emerald-400">Generated code</span>
-              <button
-                type="button"
-                onClick={() => onApplyCode(lastGenerated)}
-                className="rounded bg-emerald-700/60 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 hover:bg-emerald-700"
-              >
-                Insert into editor
-              </button>
-            </div>
-            <pre className="max-h-48 overflow-auto rounded-md border border-[#333] bg-[#0d0d0d] p-2 font-mono text-[10px] leading-relaxed text-green-400">
-              {lastGenerated.slice(0, 800)}{lastGenerated.length > 800 ? '…' : ''}
-            </pre>
+        {error && (
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-2 text-[11px] text-red-300">
+            {error}
           </div>
         )}
       </div>
 
-      <div className="shrink-0 border-t border-[#3c3c3c] p-3">
+      {messages.length <= 1 && (
+        <div className="shrink-0 border-t border-slate-200 bg-white px-3 py-2">
+          <div className="mb-1.5 text-[9px] font-bold uppercase text-slate-500">Suggestions</div>
+          <div className="flex flex-wrap gap-1">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => sendMessage(s)}
+                disabled={loading}
+                className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[9px] text-slate-600 hover:border-violet-300 hover:bg-violet-50"
+              >
+                <Sparkles className="h-2.5 w-2.5 text-violet-500" />
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="shrink-0 border-t border-slate-200 bg-white p-3">
         <div className="flex gap-2">
           <input
             type="text"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe your sketch…"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask anything about your circuit or code..."
             disabled={loading}
-            className="min-w-0 flex-1 rounded-md border border-[#3c3c3c] bg-[#252526] px-2.5 py-2 text-xs text-white outline-none focus:border-violet-500 disabled:opacity-50"
-            onKeyDown={(e) => { if (e.key === 'Enter') handleGenerate(); }}
+            className="min-w-0 flex-1 rounded-md border border-slate-300 bg-slate-50 px-2.5 py-2 text-xs text-slate-800 outline-none focus:border-violet-500 disabled:opacity-50"
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
           />
           <button
             type="button"
-            onClick={() => handleGenerate()}
-            disabled={loading || !prompt.trim()}
+            onClick={() => sendMessage()}
+            disabled={loading || !input.trim()}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-violet-600 text-white transition hover:bg-violet-500 disabled:opacity-40"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>
         </div>
-        <p className="mt-2 text-[9px] text-slate-600">Requires OPENAI_API_KEY in backend/.env</p>
       </div>
     </div>
   );

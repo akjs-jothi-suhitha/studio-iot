@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ComponentInstance, ComponentType, Wire } from '../types';
 import { COMPONENT_DEFINITIONS } from '../utils/componentDefinitions';
-import { findNearestPin, getPinAbsoluteCoords, collectPinHits, findPinDefinition } from '../utils/pinCoords';
+import { findNearestPin, getPinAbsoluteCoords, collectPinHits, findPinDefinition, getPinStubVector } from '../utils/pinCoords';
 import { buildWirePath, getPinHighlightColor, suggestWireColor, wireLaneIndex, buildObstaclesFromComponents } from '../utils/wireUtils';
 import { getSelectionBounds } from '../utils/componentBounds';
 import { getSelectionBoundsForInstance } from '../utils/componentBounds';
@@ -402,7 +402,13 @@ export const Canvas: React.FC<CanvasProps> = ({
       },
       [wire.fromComponentId, wire.toComponentId],
     );
-    const path = buildWirePath(fromCoords, toCoords, wireLaneIndex(wire.id), { obstacles });
+    const fromStub = getPinStubVector(fromComp, wire.fromPinId);
+    const toStub = getPinStubVector(toComp, wire.toPinId);
+    const path = buildWirePath(fromCoords, toCoords, wireLaneIndex(wire.id), {
+      obstacles,
+      fromStub,
+      toStub,
+    });
     const isSelected = selectedId === wire.id;
     const isAlligator = wire.wireType === 'alligator';
     const isRetractable = wire.wireType === 'retractable';
@@ -480,7 +486,11 @@ export const Canvas: React.FC<CanvasProps> = ({
           hoveredPin.pinId,
         )
       : mousePos;
-    const path = buildWirePath(startCoords, endCoords, wireLaneIndex('preview'));
+    const endComp = hoveredPin ? components.find((c) => c.id === hoveredPin.compId) : undefined;
+    const path = buildWirePath(startCoords, endCoords, wireLaneIndex('preview'), {
+      fromStub: getPinStubVector(source, activeWiringSrc.pinId),
+      toStub: endComp ? getPinStubVector(endComp, hoveredPin!.pinId) : undefined,
+    });
     const previewPin = findPinDefinition(source, activeWiringSrc.pinId);
     const color = hoveredPin ? '#f59e0b' : (manualWireColor ? activeWireColor : suggestWireColor(previewPin?.type));
 
@@ -536,7 +546,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 overflow-hidden bg-slate-200 select-none"
+      className="relative flex-1 overflow-hidden bg-slate-100 select-none"
       onWheel={handleWheel}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -549,31 +559,31 @@ export const Canvas: React.FC<CanvasProps> = ({
         <div className="flex items-center gap-2 font-semibold">
           <span className="uppercase tracking-widest text-slate-500">Workplane</span>
           {isSimulating && (
-            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-emerald-800">Simulation active</span>
+            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-emerald-800 font-semibold">🔴 Simulation active</span>
           )}
           {pendingComponentType && !isSimulating && (
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-900">
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-800 font-semibold">
               Place {COMPONENT_DEFINITIONS[pendingComponentType].name}
             </span>
           )}
           {wireMode && !isSimulating && !isWiring && (
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-900">
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-amber-800 font-semibold">
               Wire mode — click two pins
             </span>
           )}
           {isWiring && (
-            <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-sky-800">
+            <span className="rounded-full bg-sky-100 px-2.5 py-0.5 text-sky-800 font-semibold">
               Click destination pin to connect
             </span>
           )}
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setZoom(Math.max(20, zoom - 10))} className="rounded bg-white px-2 py-1 shadow-sm">−</button>
-          <span className="min-w-12 text-center font-mono">{zoom}%</span>
-          <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="rounded border border-slate-200 bg-white px-2 py-1 shadow-sm">+</button>
+          <button onClick={() => setZoom(Math.max(20, zoom - 10))} className="rounded bg-white border border-slate-200 px-2 py-1 text-slate-600 hover:bg-slate-50 shadow-sm">−</button>
+          <span className="min-w-12 text-center font-mono text-slate-700">{zoom}%</span>
+          <button onClick={() => setZoom(Math.min(200, zoom + 10))} className="rounded bg-white border border-slate-200 px-2 py-1 text-slate-600 hover:bg-slate-50 shadow-sm">+</button>
           <button
             onClick={() => { setZoom(100); setPanX(40); setPanY(30); }}
-            className="rounded border border-slate-200 bg-white px-2 py-1 shadow-sm"
+            className="rounded bg-white border border-slate-200 px-2 py-1 text-slate-600 hover:bg-slate-50 shadow-sm"
           >
             Reset
           </button>
@@ -596,9 +606,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       <div
         className="absolute inset-0 mt-11"
         style={{
-          backgroundColor: '#dbe3ea',
+          backgroundColor: '#f0f4f8',
           backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px)',
+            'linear-gradient(rgba(100,116,139,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(100,116,139,0.18) 1px, transparent 1px)',
           backgroundSize: `${GRID_SIZE * (zoom / 100)}px ${GRID_SIZE * (zoom / 100)}px`,
           backgroundPosition: `${panX}px ${panY}px`,
         }}

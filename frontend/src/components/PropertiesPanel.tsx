@@ -42,8 +42,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   return (
-    <div className="absolute bottom-4 left-4 z-30 w-72 rounded-xl border border-[#323844] bg-[#15181e] shadow-2xl shadow-black/60">
-      <div className="flex items-center justify-between border-b border-[#272c36] px-4 py-2.5">
+    <div className="absolute bottom-4 left-4 z-30 w-72 rounded-xl border border-slate-200 bg-white shadow-xl">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
         <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">
           {showComponentPanel ? 'Component' : selectedWire ? 'Wire' : 'Wire tool'}
         </h3>
@@ -52,7 +52,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             type="button"
             onClick={onDeleteSelected}
             disabled={isSimulating}
-            className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40"
+            className="text-xs font-semibold text-red-500 hover:text-red-700 disabled:opacity-40 transition-colors"
           >
             Delete
           </button>
@@ -69,11 +69,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 value={selectedComponent.name}
                 disabled={isSimulating}
                 onChange={(e) => onUpdateComponent(selectedComponent.id, { name: e.target.value })}
-                className="w-full rounded-md border border-[#323844] px-2.5 py-1.5 text-sm outline-none focus:border-cyan-500 disabled:bg-[#1e222a]"
+                className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100 disabled:text-slate-500 transition"
               />
             </div>
 
-            <div className="rounded-md bg-[#1e222a] px-2.5 py-1.5 text-[10px] text-slate-500 capitalize">
+            <div className="rounded-md bg-slate-100 px-2.5 py-1.5 text-[10px] text-slate-500 capitalize">
               {selectedComponent.type.replace(/_/g, ' ')}
             </div>
 
@@ -85,7 +85,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   value={selectedComponent.value as number}
                   disabled={isSimulating}
                   onChange={(e) => onUpdateComponent(selectedComponent.id, { value: Number(e.target.value) })}
-                  className="w-full rounded-md border border-[#323844] px-2.5 py-1.5 text-sm outline-none focus:border-cyan-500 disabled:bg-[#1e222a]"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100 disabled:text-slate-500 transition"
                 />
               </div>
             )}
@@ -97,7 +97,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   value={selectedComponent.color || '#ef4444'}
                   disabled={isSimulating}
                   onChange={(e) => onUpdateComponent(selectedComponent.id, { color: e.target.value })}
-                  className="w-full rounded-md border border-[#323844] px-2.5 py-1.5 text-sm outline-none focus:border-cyan-500 disabled:bg-[#1e222a]"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100 disabled:text-slate-500 transition"
                 >
                   <option value="#ef4444">Red</option>
                   <option value="#22c55e">Green</option>
@@ -115,7 +115,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <>
             {wireMode && !selectedWire && (
               <p className="text-[10px] leading-snug text-slate-500">
-                Pick a wire color, then click two pins to connect. Select an existing wire to edit it.
+                Pick a wire color, then click two pins to connect.
               </p>
             )}
 
@@ -130,8 +130,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     onClick={() => handleWireColorPick(color.hex)}
                     className={`h-7 w-7 rounded-full border-2 transition ${
                       wireColorTarget === color.hex
-                        ? 'border-slate-800 ring-2 ring-cyan-200 scale-110'
-                        : 'border-[#323844] hover:scale-105'
+                        ? 'border-indigo-600 ring-2 ring-indigo-300 scale-110'
+                        : 'border-slate-300 hover:scale-105 shadow-sm'
                     } disabled:opacity-40`}
                     style={{ backgroundColor: color.hex }}
                     title={color.name}
@@ -147,7 +147,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   value={selectedWire.wireType || 'hookup'}
                   disabled={isSimulating}
                   onChange={(e) => onUpdateWire(selectedWire.id, { wireType: e.target.value as Wire['wireType'] })}
-                  className="w-full rounded-md border border-[#323844] px-2.5 py-1.5 text-sm outline-none focus:border-cyan-500 disabled:bg-[#1e222a]"
+                  className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-100 disabled:text-slate-500 transition"
                 >
                   <option value="hookup">Hookup Wire</option>
                   <option value="alligator">Alligator Clips</option>

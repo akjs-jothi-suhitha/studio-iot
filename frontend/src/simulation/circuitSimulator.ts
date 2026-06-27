@@ -271,7 +271,7 @@ export class CircuitSimulator {
         if (comp.type === 'arduino_uno' || comp.type === 'arduino_nano') {
           if (pinId === 'pin_5v' || pinId === 'pin_3v3') hasPower = true;
           if (pinId.startsWith('pin_gnd')) hasGnd = true;
-        } else if (comp.type === 'esp32' || comp.type === 'esp8266') {
+        } else if (comp.type === 'esp32') {
           if (pinId.includes('3v3') || pinId === 'pin_vin' || pinId === 'pin_5v') hasPower = true;
           if (pinId.includes('gnd')) hasGnd = true;
         } else if (comp.type.startsWith('battery_')) {
@@ -358,7 +358,7 @@ export class CircuitSimulator {
           }
         }
 
-        if (comp.type === 'esp32' || comp.type === 'esp8266') {
+        if (comp.type === 'esp32') {
           if (pinId.includes('gnd')) isGnd = true;
           if (pinId === 'pin_3v3' || pinId === 'pin_3v3_2') powerVal = Math.max(powerVal, 3.3);
           if (pinId === 'pin_vin' || pinId === 'pin_5v') powerVal = Math.max(powerVal, 5);

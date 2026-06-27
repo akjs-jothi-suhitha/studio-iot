@@ -9,7 +9,7 @@ interface BreadboardSvgProps {
 export const BreadboardSvg: React.FC<BreadboardSvgProps> = ({ width, height }) => {
   const colSpacing = 9.5;
   const startX = 20;
-  const cols = 30;
+  const cols = 60;
 
   const holeY = (row: number, section: 'top' | 'bottom') =>
     section === 'top' ? 33 + row * 8.5 : 92 + row * 8.5;

@@ -11,7 +11,7 @@ export interface BoardCodeFiles {
   activeTab?: Record<string, string>;
 }
 
-export const PROGRAMMABLE_BOARD_TYPES: ComponentType[] = ['arduino_uno', 'arduino_nano', 'esp32', 'esp8266'];
+export const PROGRAMMABLE_BOARD_TYPES: ComponentType[] = ['arduino_uno', 'arduino_nano', 'esp32'];
 
 export const DEFAULT_SKETCH = `void setup() {
   Serial.begin(9600);
@@ -22,22 +22,117 @@ void loop() {
 }
 `;
 
-export const ESP32_BLYNK_SKETCH = `// ESP32 + Blynk-style virtual pins
-#define BLYNK_TEMPLATE_ID "TMPL0001"
-#define BLYNK_AUTH_TOKEN "YOUR_AUTH_TOKEN"
+export const ESP32_HIVEMQ_SKETCH = `// ESP32 Gas Alarm + HiveMQ Cloud MQTT
+// Install: PubSubClient library (Sketch → Include Library → Manage Libraries)
 
-const char* ssid = "YOUR_WIFI";
-const char* pass = "YOUR_PASSWORD";
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <LiquidCrystal.h>
+
+// ── WiFi (change these) ──
+const char* WIFI_SSID     = "YOUR_WIFI_NAME";
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+
+// ── HiveMQ Cloud (from console.hivemq.cloud → Cluster → Access) ──
+const char* MQTT_BROKER   = "YOUR_CLUSTER.s1.eu.hivemq.cloud";  // e.g. abc123.s1.eu.hivemq.cloud
+const int   MQTT_PORT     = 8883;
+const char* MQTT_USER     = "YOUR_HIVEMQ_USERNAME";
+const char* MQTT_PASS     = "YOUR_HIVEMQ_PASSWORD";
+
+// ── Topics (match your project Auth Token / device ID) ──
+const char* DEVICE_ID     = "YOUR_DEVICE_ID";  // use project Auth Token from dashboard
+const char* TOPIC_TELEM   = "device/YOUR_DEVICE_ID/telemetry";
+const char* TOPIC_STATUS  = "device/YOUR_DEVICE_ID/status";
+const char* TOPIC_CMD     = "device/YOUR_DEVICE_ID/commands";
+
+// ── Pins (match circuit) ──
+const int GAS_PIN    = 36;   // VP / A0
+const int BUZZER_PIN = 18;
+const int RED_LED    = 19;
+const int GREEN_LED  = 21;
+const int THRESHOLD  = 400;
+
+// LCD 4-bit: RS, E, D4, D5, D6, D7
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+WiFiClientSecure wifiClient;
+PubSubClient mqtt(wifiClient);
+
+void connectWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println(" connected");
+}
+
+void connectMQTT() {
+  wifiClient.setInsecure(); // Skip certificate verification for easy connection
+  mqtt.setServer(MQTT_BROKER, MQTT_PORT);
+  mqtt.setCallback([](char* topic, byte* payload, unsigned int len) {
+    String msg;
+    for (unsigned int i = 0; i < len; i++) msg += (char)payload[i];
+    if (msg.indexOf("\\"led\\":true") >= 0 || msg.indexOf("\\"led\\":1") >= 0)
+      digitalWrite(GREEN_LED, HIGH);
+    if (msg.indexOf("\\"led\\":false") >= 0 || msg.indexOf("\\"led\\":0") >= 0)
+      digitalWrite(GREEN_LED, LOW);
+  });
+  while (!mqtt.connected()) {
+    if (mqtt.connect(DEVICE_ID, MQTT_USER, MQTT_PASS)) {
+      mqtt.publish(TOPIC_STATUS, "{\\"online\\":true}");
+      mqtt.subscribe(TOPIC_CMD);
+      Serial.println("MQTT connected");
+    } else {
+      delay(3000);
+    }
+  }
+}
 
 void setup() {
   Serial.begin(115200);
-  // WiFi + cloud connect here
-  Serial.println("ESP32 ready");
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(RED_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+  lcd.begin(16, 2);
+  lcd.print("Connecting...");
+  connectWiFi();
+  connectMQTT();
+  lcd.clear();
+  lcd.print("SAFE");
 }
 
 void loop() {
-  // Read sensors, write to virtual pins V0, V1...
-  delay(1000);
+  if (!mqtt.connected()) connectMQTT();
+  mqtt.loop();
+
+  int gas = analogRead(GAS_PIN);
+  bool alarm = gas > THRESHOLD;
+
+  if (alarm) {
+    lcd.setCursor(0, 0);
+    lcd.print("GAS LEAK!     ");
+    digitalWrite(RED_LED, HIGH);
+    digitalWrite(GREEN_LED, LOW);
+    tone(BUZZER_PIN, 1000);
+    delay(200);
+    noTone(BUZZER_PIN);
+  } else {
+    lcd.setCursor(0, 0);
+    lcd.print("SAFE          ");
+    digitalWrite(RED_LED, LOW);
+    noTone(BUZZER_PIN);
+  }
+
+  char payload[128];
+  snprintf(payload, sizeof(payload),
+    "{\\"gas\\":%d,\\"alarm\\":%s,\\"V0\\":%d,\\"timestamp\\":%lu}",
+    gas, alarm ? "true" : "false", gas, millis() / 1000);
+  mqtt.publish(TOPIC_TELEM, payload);
+
+  delay(2000);
 }
 `;
 
@@ -47,38 +142,21 @@ export const getProgrammableBoardIds = (components: { id: string; type: string }
 /** @deprecated use getProgrammableBoardIds */
 export const getArduinoIds = getProgrammableBoardIds;
 
-export const ESP8266_SKETCH = `// ESP8266 NodeMCU sketch
-const char* ssid = "YOUR_WIFI";
-const char* pass = "YOUR_PASSWORD";
-
-void setup() {
-  Serial.begin(115200);
-  Serial.println("ESP8266 ready");
-}
-
-void loop() {
-  delay(1000);
-}
-`;
-
 export const getBoardLabel = (comp?: ComponentInstance): string => {
   if (!comp) return 'board';
   if (comp.type === 'esp32') return 'esp32';
-  if (comp.type === 'esp8266') return 'esp8266';
   if (comp.type === 'arduino_nano') return 'nano';
   const match = comp.name.match(/(\d+)/);
   return match ? `arduino_${match[1]}` : 'arduino_1';
 };
 
 export const defaultSketchForBoard = (type: ComponentType): string => {
-  if (type === 'esp32') return ESP32_BLYNK_SKETCH;
-  if (type === 'esp8266') return ESP8266_SKETCH;
+  if (type === 'esp32') return ESP32_HIVEMQ_SKETCH;
   return DEFAULT_SKETCH;
 };
 
 export const boardTypeFromComponent = (type?: ComponentType): string => {
   if (type === 'esp32') return 'esp32';
-  if (type === 'esp8266') return 'esp8266';
   if (type === 'arduino_nano') return 'arduino_nano';
   return 'arduino_uno';
 };
@@ -175,7 +253,6 @@ export const removeSketchTab = (data: BoardCodeFiles, boardId: string, tab: stri
 
 export const fqbnForComponent = (type?: ComponentType): string => {
   if (type === 'esp32') return 'esp32:esp32:esp32';
-  if (type === 'esp8266') return 'esp8266:esp8266:nodemcuv2';
   if (type === 'arduino_nano') return 'arduino:avr:nano:cpu=atmega328old';
   return 'arduino:avr:uno';
 };

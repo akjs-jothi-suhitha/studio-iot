@@ -2,7 +2,6 @@ export type ComponentType =
   | 'arduino_uno'
   | 'arduino_nano'
   | 'esp32'
-  | 'esp8266'
   | 'breadboard_small'
   | 'resistor'
   | 'led'
@@ -65,7 +64,7 @@ export interface Wire {
 
 export type ViewMode = 'circuit' | 'dashboard' | 'arduino';
 
-export type BoardType = 'arduino_uno' | 'arduino_nano' | 'arduino_mega' | 'esp32' | 'esp8266';
+export type BoardType = 'arduino_uno' | 'arduino_nano' | 'arduino_mega' | 'esp32';
 
 export interface ProjectState {
   components: ComponentInstance[];
@@ -106,6 +105,12 @@ export interface BlynkDeviceConfig {
   authToken: string;
   deviceName: string;
   datastreams: BlynkDatastream[];
+}
+
+export interface CloudMqttConfig {
+  brokerUrl: string;
+  username: string;
+  password: string;
 }
 
 export interface CodeTemplate {

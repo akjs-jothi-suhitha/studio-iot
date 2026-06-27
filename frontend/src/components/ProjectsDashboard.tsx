@@ -25,7 +25,6 @@ const BOARD_LABELS: Record<string, string> = {
   arduino_uno: 'Arduino Uno',
   arduino_nano: 'Arduino Nano',
   esp32: 'ESP32',
-  esp8266: 'ESP8266',
   arduino_mega: 'Arduino Mega',
 };
 
@@ -85,22 +84,22 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOp
   );
 
   return (
-    <div className="min-h-screen bg-[#0a0f1a]">
-      <header className="border-b border-white/10 bg-[#0f172a]/80 backdrop-blur-md">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b border-indigo-100 bg-white shadow-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 font-bold text-white shadow-lg">
               SI
             </div>
             <div>
-              <div className="font-bold text-white">Studio IoT</div>
+              <div className="font-bold text-slate-900">Studio IoT</div>
               <div className="text-xs text-slate-500">{user.name || user.email}</div>
             </div>
           </div>
           <button
             type="button"
             onClick={onLogout}
-            className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-[#15181e]/5 hover:text-white"
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
           >
             <LogOut className="h-4 w-4" />
             Logout
@@ -116,16 +115,16 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOp
             { icon: Code2, label: 'Code Studio', color: 'text-emerald-400' },
             { icon: LayoutDashboard, label: 'Cloud Dashboard', color: 'text-violet-400' },
           ].map(({ icon: Icon, label, color }) => (
-            <div key={label} className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#15181e]/5 px-4 py-3">
+            <div key={label} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
               <Icon className={`h-5 w-5 ${color}`} />
-              <span className="text-sm font-semibold text-white">{label}</span>
+              <span className="text-sm font-semibold text-slate-700">{label}</span>
             </div>
           ))}
         </div>
 
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Your Projects</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Your Projects</h1>
             <p className="mt-1 text-sm text-slate-500">
               Open a project to design circuits, write code, and monitor live telemetry.
             </p>
@@ -149,7 +148,7 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOp
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search projects…"
-              className="w-full rounded-lg border border-white/10 bg-[#15181e]/5 py-2 pl-9 pr-3 text-sm text-white outline-none focus:border-cyan-500"
+              className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
             />
           </div>
         )}
@@ -157,9 +156,9 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOp
         {loading ? (
           <div className="py-20 text-center text-slate-500">Loading projects…</div>
         ) : filtered.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/15 bg-[#15181e]/5 p-16 text-center">
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-16 text-center shadow-sm">
             <FolderOpen className="mx-auto mb-4 h-12 w-12 text-slate-300" />
-            <p className="mb-2 text-lg font-semibold text-white">
+            <p className="mb-2 text-lg font-semibold text-slate-800">
               {search ? 'No matching projects' : 'No projects yet'}
             </p>
             <p className="mb-6 text-sm text-slate-500">
@@ -182,12 +181,12 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOp
                 key={project.id}
                 type="button"
                 onClick={() => onOpenProject(project)}
-                className="group relative rounded-xl border border-white/10 bg-[#15181e]/5 p-5 text-left transition hover:border-cyan-500/40 hover:bg-[#15181e]/8 hover:shadow-lg hover:shadow-cyan-500/5"
+                className="group relative rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-cyan-300 hover:shadow-lg hover:shadow-cyan-500/10"
               >
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 transition group-hover:bg-cyan-500/20">
                   <Cpu className="h-6 w-6" />
                 </div>
-                <h3 className="font-bold text-white">{project.name}</h3>
+                <h3 className="font-bold text-slate-900">{project.name}</h3>
                 <p className="mt-1 text-xs text-slate-500">
                   {BOARD_LABELS[project.boardType || ''] || project.boardType?.replace(/_/g, ' ') || 'Arduino Uno'}
                 </p>
@@ -214,9 +213,9 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOp
           </div>
         )}
 
-        <div className="mt-12 flex items-center justify-center gap-2 text-xs text-slate-300">
+        <div className="mt-12 flex items-center justify-center gap-2 text-xs text-slate-500">
           <Sparkles className="h-3.5 w-3.5" />
-          AI code generation available in Code Studio — set OPENAI_API_KEY in backend/.env
+          Gemini AI chat is available in Code Studio. Set GEMINI_API_KEY in backend/.env.
         </div>
       </main>
     </div>

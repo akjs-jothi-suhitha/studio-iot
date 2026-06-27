@@ -32,6 +32,11 @@ export interface PortInfo {
   connected: boolean;
 }
 
+export interface MqttStatus {
+  connected: boolean;
+  message?: string;
+}
+
 const authHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('studioiot_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -122,4 +127,23 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+
+  aiChat: (payload: {
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+    boardType: string;
+    components?: string[];
+  }) =>
+    request<{ reply: string; code: string | null }>('/api/ai/chat', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  mqttStatus: () =>
+    request<MqttStatus>('/api/mqtt/status'),
+
+  startMqtt: (payload: { brokerUrl: string; username: string; password: string }) =>
+    request<MqttStatus>('/api/mqtt/start', { method: 'POST', body: JSON.stringify(payload) }),
+
+  pauseMqtt: () =>
+    request<MqttStatus>('/api/mqtt/pause', { method: 'POST' }),
 };

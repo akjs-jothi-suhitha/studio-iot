@@ -19,8 +19,8 @@ const generateBreadboardPins = (): Pin[] => {
 
   // Power rails: Top '-' and '+'
   // Divided into 2 banks (1-15, 16-30) or single bank for simplicity.
-  // We'll create 30 holes for top '-', 30 holes for top '+'
-  for (let c = 0; c < 30; c++) {
+  // We'll create 60 holes for top '-', 60 holes for top '+'
+  for (let c = 0; c < 60; c++) {
     const x = startX + c * colSpacing;
     // Top '-' rail
     pins.push({
@@ -40,10 +40,10 @@ const generateBreadboardPins = (): Pin[] => {
     });
   }
 
-  // Row columns: A-E (columns 1 to 30)
+  // Row columns: A-E (columns 1 to 60)
   const rowsTop = ['a', 'b', 'c', 'd', 'e'];
   for (let r = 0; r < 5; r++) {
-    for (let c = 0; c < 30; c++) {
+    for (let c = 0; c < 60; c++) {
       const x = startX + c * colSpacing;
       const y = 33 + r * 8.5;
       const rowName = rowsTop[r];
@@ -57,10 +57,10 @@ const generateBreadboardPins = (): Pin[] => {
     }
   }
 
-  // Row columns: F-J (columns 1 to 30)
+  // Row columns: F-J (columns 1 to 60)
   const rowsBottom = ['f', 'g', 'h', 'i', 'j'];
   for (let r = 0; r < 5; r++) {
-    for (let c = 0; c < 30; c++) {
+    for (let c = 0; c < 60; c++) {
       const x = startX + c * colSpacing;
       const y = 92 + r * 8.5;
       const rowName = rowsBottom[r];
@@ -75,7 +75,7 @@ const generateBreadboardPins = (): Pin[] => {
   }
 
   // Power rails: Bottom '-' and '+'
-  for (let c = 0; c < 30; c++) {
+  for (let c = 0; c < 60; c++) {
     const x = startX + c * colSpacing;
     // Bottom '-' rail
     pins.push({
@@ -222,42 +222,14 @@ export const COMPONENT_DEFINITIONS: Record<ComponentType, ComponentDef> = {
       { id: 'pin_3v3', name: '3.3V', x: 108, y: 58, type: 'power' },
     ],
   },
-  esp8266: {
-    type: 'esp8266',
-    name: 'ESP8266 NodeMCU',
-    category: 'boards',
-    width: 180,
-    height: 90,
-    description: 'Wi-Fi microcontroller (NodeMCU). Arduino-compatible with ESP8266 core.',
-    pins: [
-      { id: 'pin_vin', name: 'VIN', x: 8, y: 8, type: 'power' },
-      { id: 'pin_gnd1', name: 'GND', x: 18, y: 8, type: 'ground' },
-      { id: 'pin_3v3', name: '3V3', x: 28, y: 8, type: 'power' },
-      { id: 'pin_d0', name: 'D0', x: 38, y: 8, type: 'digital' },
-      { id: 'pin_d1', name: 'D1/TX', x: 48, y: 8, type: 'digital' },
-      { id: 'pin_d2', name: 'D2', x: 58, y: 8, type: 'digital' },
-      { id: 'pin_d3', name: 'D3/RX', x: 68, y: 8, type: 'digital' },
-      { id: 'pin_d4', name: 'D4', x: 78, y: 8, type: 'digital' },
-      { id: 'pin_d5', name: 'D5', x: 88, y: 8, type: 'digital' },
-      { id: 'pin_d6', name: 'D6', x: 98, y: 8, type: 'digital' },
-      { id: 'pin_d7', name: 'D7', x: 108, y: 8, type: 'digital' },
-      { id: 'pin_d8', name: 'D8', x: 118, y: 8, type: 'digital' },
-      { id: 'pin_rx', name: 'RX', x: 128, y: 8, type: 'digital' },
-      { id: 'pin_tx', name: 'TX', x: 138, y: 8, type: 'digital' },
-      { id: 'pin_a0', name: 'A0', x: 8, y: 78, type: 'analog' },
-      { id: 'pin_gnd2', name: 'GND', x: 18, y: 78, type: 'ground' },
-      { id: 'pin_3v3_2', name: '3V3', x: 28, y: 78, type: 'power' },
-      { id: 'pin_en', name: 'EN', x: 38, y: 78, type: 'passive' },
-      { id: 'pin_rst', name: 'RST', x: 48, y: 78, type: 'passive' },
-    ],
-  },
+
   breadboard_small: {
     type: 'breadboard_small',
-    name: 'Small Breadboard',
+    name: 'Full Breadboard',
     category: 'boards',
-    width: 320,
+    width: 610,
     height: 160,
-    description: 'A half-size prototyping breadboard with 30 columns and power rails.',
+    description: 'A full-size prototyping breadboard with 60 columns and power rails.',
     pins: generateBreadboardPins(),
   },
   resistor: {

@@ -54,11 +54,6 @@ const buildWokwiProps = (
         ledPower: isSimulating,
         led1: false,
       };
-    case 'esp8266':
-      return {
-        ledPower: isSimulating,
-        ledBlue: isSimulating,
-      };
     case 'led':
       return {
         value: ledState,

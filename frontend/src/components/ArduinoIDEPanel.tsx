@@ -64,7 +64,6 @@ const BOARD_OPTIONS: BoardInfo[] = [
   { id: 'arduino_nano', name: 'Arduino Nano', fqbn: 'arduino:avr:nano:cpu=atmega328old' },
   { id: 'arduino_mega', name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega' },
   { id: 'esp32', name: 'ESP32 Dev Module', fqbn: 'esp32:esp32:esp32' },
-  { id: 'esp8266', name: 'ESP8266 NodeMCU', fqbn: 'esp8266:esp8266:nodemcuv2' },
 ];
 
 export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
@@ -247,14 +246,14 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
     : 'sketch.ino';
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#252526] text-slate-200">
-      <div className="flex shrink-0 items-center gap-2 border-b border-[#3c3c3c] bg-[#2d2d2d] px-3 py-2">
+    <div className="flex h-full min-h-0 flex-1 flex-col bg-[#1e1e1e] text-slate-100">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[#2d2d30] bg-[#252526] px-3 py-2">
         <button
           type="button"
           onClick={handleVerify}
           disabled={isSimulating || compiling || !activeCode.trim()}
           title="Verify (Compile only)"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#3c3c3c] text-teal-400 transition hover:bg-[#4a4a4a] disabled:opacity-40"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 border border-slate-200 text-teal-600 transition hover:bg-slate-200 disabled:opacity-40"
         >
           <Check className="h-4 w-4" />
         </button>
@@ -263,20 +262,20 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
           onClick={handleUpload}
           disabled={isSimulating || uploading || !activeCode.trim()}
           title="Upload (Compile & Upload)"
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-[#3c3c3c] text-teal-400 transition hover:bg-[#4a4a4a] disabled:opacity-40"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 border border-slate-200 text-teal-600 transition hover:bg-slate-200 disabled:opacity-40"
         >
           <Upload className="h-4 w-4" />
         </button>
         <button
           type="button"
           onClick={() => setShowAi((v) => !v)}
-          title="AI Code Assistant"
-          className={`flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition ${
-            showAi ? 'bg-violet-600 text-white' : 'bg-[#3c3c3c] text-violet-300 hover:bg-[#4a4a4a]'
+          title="AI Chat Assistant"
+          className={`flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold border transition ${
+            showAi ? 'bg-violet-600 text-white border-violet-600' : 'bg-slate-100 text-violet-600 border-slate-200 hover:bg-slate-200'
           }`}
         >
           <Sparkles className="h-3.5 w-3.5" />
-          AI Bot
+          AI Chat
         </button>
 
         {cliStatus && !cliStatus.installed && (
@@ -288,24 +287,15 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
         <button
           type="button"
           onClick={() => setShowBoardModal(true)}
-          className="ml-2 flex items-center gap-2 rounded-md border border-[#4a4a4a] bg-[#1e1e1e] px-3 py-1.5 text-sm hover:border-teal-600"
+          className="ml-2 flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50 hover:border-teal-600"
         >
-          <Usb className="h-4 w-4 text-teal-400" />
+          <Usb className="h-4 w-4 text-teal-600" />
           <span>{boardName}</span>
-          <span className="text-xs text-slate-500">{selectedPort || 'No port'}</span>
-          <ChevronDown className="h-3 w-3 text-slate-500" />
+          <span className="text-xs text-slate-400">{selectedPort || 'No port'}</span>
+          <ChevronDown className="h-3 w-3 text-slate-400" />
         </button>
 
-        <button
-          type="button"
-          onClick={handleSuggestCode}
-          disabled={isSimulating || !activeBoardId}
-          title="Generate code from wired components"
-          className="ml-1 flex items-center gap-1 rounded-md border border-[#4a4a4a] px-2 py-1.5 text-xs text-teal-400 hover:bg-[#3c3c3c] disabled:opacity-40"
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          Auto-code
-        </button>
+
 
         {cliStatus && (
           <span
@@ -319,18 +309,18 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
         )}
 
         <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={() => setFontSize((s) => Math.max(10, s - 1))} className="rounded p-1.5 hover:bg-[#3c3c3c]">
+          <button type="button" onClick={() => setFontSize((s) => Math.max(10, s - 1))} className="rounded p-1.5 hover:bg-slate-200 text-slate-600">
             <Minus className="h-4 w-4" />
           </button>
-          <span className="min-w-8 text-center text-xs text-slate-500">{fontSize}</span>
-          <button type="button" onClick={() => setFontSize((s) => Math.min(24, s + 1))} className="rounded p-1.5 hover:bg-[#3c3c3c]">
+          <span className="min-w-8 text-center text-xs text-slate-400">{fontSize}</span>
+          <button type="button" onClick={() => setFontSize((s) => Math.min(24, s + 1))} className="rounded p-1.5 hover:bg-slate-200 text-slate-600">
             <Plus className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-[#3c3c3c] bg-[#333333] py-2">
+      <div className="relative flex min-h-0 flex-1">
+        <div className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-slate-200 bg-slate-100 py-2">
           {[
             { id: 'sketchbook' as const, icon: FolderOpen },
             { id: 'boards' as const, icon: CpuIcon },
@@ -341,17 +331,17 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
               key={id}
               type="button"
               onClick={() => setSidebar(sidebar === id ? null : id)}
-              className={`relative flex h-10 w-10 items-center justify-center rounded ${sidebar === id ? 'text-teal-400' : 'text-slate-500 hover:text-white'}`}
+              className={`relative flex h-10 w-10 items-center justify-center rounded ${sidebar === id ? 'text-teal-600' : 'text-slate-500 hover:text-slate-800'}`}
             >
-              {sidebar === id && <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-teal-400" />}
+              {sidebar === id && <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-teal-500" />}
               <Icon className="h-5 w-5" />
             </button>
           ))}
         </div>
 
         {sidebar && (
-          <div className="w-56 shrink-0 overflow-y-auto border-r border-[#3c3c3c] bg-[#252526] p-3">
-            <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          <div className="w-56 shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-3">
+            <h3 className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
               {sidebar === 'sketchbook' && 'Sketchbook'}
               {sidebar === 'boards' && 'Boards'}
               {sidebar === 'libraries' && 'Libraries'}
@@ -367,18 +357,18 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
                       key={b.id}
                       type="button"
                       onClick={() => switchBoard(b.id)}
-                      className={`mb-1 w-full rounded px-2 py-1.5 text-left text-xs ${
-                        activeBoardId === b.id ? 'bg-teal-900/40 text-teal-300' : 'hover:bg-[#2d2d2d]'
+                      className={`mb-1 w-full rounded px-2 py-1.5 text-left text-xs transition ${
+                        activeBoardId === b.id ? 'bg-teal-50 text-teal-700 font-semibold shadow-sm' : 'text-slate-700 hover:bg-slate-100'
                       }`}
                     >
                       {getBoardLabel(b)} — {b.name}
                     </button>
                   ))}
                   {activeBoardId && (
-                    <div className="mt-3 border-t border-[#3c3c3c] pt-2">
+                    <div className="mt-3 border-t border-slate-200 pt-2">
                       <div className="mb-1 flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase text-slate-500">Files</span>
-                        <button type="button" onClick={handleAddFile} title="Add file" className="rounded p-0.5 text-teal-400 hover:bg-[#3c3c3c]">
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Files</span>
+                        <button type="button" onClick={handleAddFile} title="Add file" className="rounded p-0.5 text-teal-600 hover:bg-slate-100">
                           <FilePlus className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -387,14 +377,14 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
                           <button
                             type="button"
                             onClick={() => switchTab(tab)}
-                            className={`flex-1 rounded px-2 py-1 text-left text-[10px] font-mono ${
-                              activeTabName === tab ? 'bg-[#1e1e1e] text-teal-300' : 'text-slate-500 hover:text-slate-300'
+                            className={`flex-1 rounded px-2 py-1 text-left text-[10px] font-mono transition ${
+                              activeTabName === tab ? 'bg-slate-100 text-teal-700 font-semibold' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                             }`}
                           >
                             {tab}
                           </button>
                           {tab !== mainTabName(activeBoardComp) && (
-                            <button type="button" onClick={() => handleDeleteFile(tab)} className="rounded p-0.5 text-slate-300 opacity-0 hover:text-red-400 group-hover:opacity-100">
+                            <button type="button" onClick={() => handleDeleteFile(tab)} className="rounded p-0.5 text-slate-400 opacity-0 hover:text-red-600 group-hover:opacity-100">
                               <Trash2 className="h-3 w-3" />
                             </button>
                           )}
@@ -410,54 +400,54 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
                   key={b.id}
                   type="button"
                   onClick={() => { onChangeBoardType(b.id); setSelectedBoard(b.id); }}
-                  className={`mb-1 w-full rounded px-2 py-1.5 text-left text-xs ${boardType === b.id ? 'bg-teal-900/40 text-teal-300' : 'hover:bg-[#2d2d2d]'}`}
+                  className={`mb-1 w-full rounded px-2 py-1.5 text-left text-xs transition ${boardType === b.id ? 'bg-teal-50 text-teal-700 font-semibold shadow-sm' : 'text-slate-700 hover:bg-slate-100'}`}
                 >
                   {b.name}
                 </button>
               ))}
             {sidebar === 'libraries' && (
-              <div className="space-y-3">
+              <div className="space-y-3 text-slate-700">
                 <input
                   type="text"
                   placeholder="Search libraries…"
                   value={librarySearch}
                   onChange={(e) => setLibrarySearch(e.target.value)}
-                  className="w-full rounded border border-[#3c3c3c] bg-[#1e1e1e] px-2 py-1 text-xs"
+                  className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs outline-none focus:border-teal-500"
                 />
                 <div>
-                  <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Installed</div>
+                  <div className="mb-1 text-[10px] font-bold uppercase text-slate-400">Installed</div>
                   {installedLibraries.filter((l) => l.toLowerCase().includes(librarySearch.toLowerCase())).map((lib) => (
-                    <div key={lib} className="mb-1 rounded bg-[#1e1e1e] px-2 py-1 text-[10px] font-mono text-teal-300">{lib}</div>
+                    <div key={lib} className="mb-1 rounded bg-teal-50 px-2 py-1 text-[10px] font-mono text-teal-700">{lib}</div>
                   ))}
                 </div>
                 <div>
-                  <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Import from URL</div>
+                  <div className="mb-1 text-[10px] font-bold uppercase text-slate-400">Import from URL</div>
                   <input
                     type="url"
                     placeholder="https://github.com/…/library.zip"
                     value={libraryUrl}
                     onChange={(e) => setLibraryUrl(e.target.value)}
-                    className="mb-1 w-full rounded border border-[#3c3c3c] bg-[#1e1e1e] px-2 py-1 text-[10px]"
+                    className="mb-1 w-full rounded border border-slate-300 bg-white px-2 py-1 text-[10px] outline-none focus:border-teal-500"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      if (!libraryUrl.trim()) return;
-                      const name = libraryUrl.split('/').pop()?.replace('.zip', '') || 'CustomLib';
-                      if (!installedLibraries.includes(name)) {
-                        setInstalledLibraries((prev) => [...prev, name]);
-                      }
-                      appendOutput(`[Library] Imported ${name} from ${libraryUrl}`);
-                      setLibraryUrl('');
-                      setActiveTab('output');
+                       if (!libraryUrl.trim()) return;
+                       const name = libraryUrl.split('/').pop()?.replace('.zip', '') || 'CustomLib';
+                       if (!installedLibraries.includes(name)) {
+                         setInstalledLibraries((prev) => [...prev, name]);
+                       }
+                       appendOutput(`[Library] Imported ${name} from ${libraryUrl}`);
+                       setLibraryUrl('');
+                       setActiveTab('output');
                     }}
-                    className="w-full rounded bg-teal-800/50 py-1 text-[10px] font-semibold text-teal-300 hover:bg-teal-800"
+                    className="w-full rounded bg-teal-600 py-1 text-[10px] font-semibold text-white hover:bg-teal-700 transition"
                   >
                     Import library
                   </button>
                 </div>
                 <div>
-                  <div className="mb-1 text-[10px] font-bold uppercase text-slate-500">Popular online</div>
+                  <div className="mb-1 text-[10px] font-bold uppercase text-slate-400">Popular online</div>
                   {ONLINE_LIBRARIES.filter((l) => l.name.toLowerCase().includes(librarySearch.toLowerCase())).map((lib) => (
                     <button
                       key={lib.id}
@@ -469,37 +459,37 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
                         appendOutput(`[Library] Added ${lib.name} — #include ready for verify`);
                         setActiveTab('output');
                       }}
-                      className="mb-1 block w-full rounded border border-[#3c3c3c] px-2 py-1.5 text-left text-[10px] hover:bg-[#2d2d2d]"
+                      className="mb-1 block w-full rounded border border-slate-200 bg-white px-2 py-1.5 text-left text-[10px] text-slate-700 hover:bg-slate-50 transition"
                     >
-                      <div className="font-semibold text-slate-200">{lib.name}</div>
-                      <div className="truncate text-slate-500">{lib.url}</div>
+                      <div className="font-semibold text-slate-800">{lib.name}</div>
+                      <div className="truncate text-slate-400">{lib.url}</div>
                     </button>
                   ))}
                 </div>
               </div>
             )}
             {sidebar === 'extensions' && (
-              <div className="space-y-2">
+              <div className="space-y-2 text-slate-700">
                 {EXTENSIONS.map((ext) => (
-                  <label key={ext.id} className="flex cursor-pointer items-start gap-2 rounded border border-[#3c3c3c] p-2 hover:bg-[#2d2d2d]">
-                    <input type="checkbox" defaultChecked={ext.id === 'lint-hints'} className="mt-0.5 accent-teal-500" />
+                  <label key={ext.id} className="flex cursor-pointer items-start gap-2 rounded border border-slate-200 bg-white p-2 hover:bg-slate-50 transition">
+                    <input type="checkbox" defaultChecked={ext.id === 'lint-hints'} className="mt-0.5 accent-teal-600" />
                     <div>
-                      <div className="text-xs font-semibold text-slate-200">{ext.name}</div>
-                      <div className="text-[10px] text-slate-500">{ext.desc}</div>
+                      <div className="text-xs font-semibold text-slate-800">{ext.name}</div>
+                      <div className="text-[10px] text-slate-400">{ext.desc}</div>
                     </div>
                   </label>
                 ))}
-                <p className="text-[10px] text-slate-500">Extensions apply to the editor UI. Hardware upload uses arduino-cli on the server.</p>
+                <p className="text-[10px] text-slate-400">Extensions apply to the editor UI. Hardware upload uses arduino-cli on the server.</p>
               </div>
             )}
           </div>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-w-0 flex-1 flex-col">
           {/* Per-Arduino file tabs */}
-          <div className="flex shrink-0 overflow-x-auto border-b border-[#3c3c3c] bg-[#2d2d2d]">
+          <div className="flex shrink-0 overflow-x-auto border-b border-slate-200 bg-slate-100">
             {programmableBoards.length === 0 ? (
-              <div className="px-4 py-1.5 text-xs text-slate-500">No board in circuit</div>
+              <div className="px-4 py-1.5 text-xs text-slate-400">No board in circuit</div>
             ) : (
               activeBoardId &&
               getSketchTabs(activeBoardId, activeBoardComp, boardCodes).map((tab) => (
@@ -507,8 +497,8 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
                   key={tab}
                   type="button"
                   onClick={() => switchTab(tab)}
-                  className={`shrink-0 border-r border-[#3c3c3c] px-4 py-1.5 text-xs font-mono ${
-                    activeTabName === tab ? 'bg-[#1e1e1e] text-teal-300' : 'text-slate-500 hover:text-slate-300'
+                  className={`shrink-0 border-r border-slate-200 px-4 py-1.5 text-xs font-mono transition ${
+                    activeTabName === tab ? 'bg-white text-teal-700 font-semibold border-t-2 border-t-teal-500' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                   }`}
                 >
                   {tab}
@@ -548,28 +538,28 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
             )}
           </div>
 
-          <div className="flex h-52 shrink-0 flex-col border-t border-[#3c3c3c] bg-[#0d0d0d]">
-            <div className="flex shrink-0 items-center justify-between border-b border-[#3c3c3c] bg-[#1a1a1a]">
+          <div className="flex h-52 shrink-0 flex-col border-t border-slate-200 bg-slate-950 text-slate-100">
+            <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900">
               <div className="flex">
-                <button type="button" onClick={() => setActiveTab('output')} className={`px-4 py-2 text-xs font-semibold ${activeTab === 'output' ? 'border-b-2 border-teal-400 text-teal-400' : 'text-slate-500 hover:text-slate-300'}`}>
+                <button type="button" onClick={() => setActiveTab('output')} className={`px-4 py-2 text-xs font-semibold transition ${activeTab === 'output' ? 'border-b-2 border-teal-500 text-teal-400' : 'text-slate-400 hover:text-slate-200'}`}>
                   Output
                 </button>
-                <button type="button" onClick={() => setActiveTab('serial')} className={`px-4 py-2 text-xs font-semibold ${activeTab === 'serial' ? 'border-b-2 border-teal-400 text-teal-400' : 'text-slate-500 hover:text-slate-300'}`}>
+                <button type="button" onClick={() => setActiveTab('serial')} className={`px-4 py-2 text-xs font-semibold transition ${activeTab === 'serial' ? 'border-b-2 border-teal-500 text-teal-400' : 'text-slate-400 hover:text-slate-200'}`}>
                   Serial Monitor
                 </button>
               </div>
               {activeTab === 'output' && outputLines.length > 0 && (
-                <button type="button" onClick={() => setOutputLines([])} className="mr-2 text-[10px] text-slate-500 hover:text-slate-300">Clear</button>
+                <button type="button" onClick={() => setOutputLines([])} className="mr-2 text-[10px] text-slate-400 hover:text-slate-200">Clear</button>
               )}
             </div>
             {activeTab === 'serial' && (
-              <div className="flex shrink-0 border-b border-[#3c3c3c] px-3 py-2">
+              <div className="flex shrink-0 border-b border-slate-800 bg-slate-900 px-3 py-2">
                 <input
                   type="text"
                   value={serialInput}
                   onChange={(e) => setSerialInput(e.target.value)}
                   placeholder={`Send to ${boardName} on ${selectedPort || 'no port selected'}`}
-                  className="w-full rounded border border-[#333] bg-[#1a1a1a] px-2.5 py-1.5 font-mono text-xs text-green-400 outline-none focus:border-teal-600"
+                  className="w-full rounded border border-slate-800 bg-slate-950 px-2.5 py-1.5 font-mono text-xs text-green-400 outline-none focus:border-teal-500"
                   onKeyDown={(e) => { if (e.key === 'Enter' && serialInput.trim()) { appendOutput(`[TX] ${serialInput}`); setSerialInput(''); setActiveTab('output'); } }}
                 />
               </div>
@@ -605,57 +595,61 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
               <div ref={logsEndRef} />
             </div>
             {activeTab === 'serial' && (
-              <div className="flex shrink-0 justify-end border-t border-[#3c3c3c] bg-[#1a1a1a] p-1.5">
-                <button type="button" onClick={onClearSerial} className="rounded px-3 py-1 text-xs text-slate-500 hover:bg-[#333] hover:text-white">Clear serial</button>
+              <div className="flex shrink-0 justify-end border-t border-slate-800 bg-slate-900 p-1.5">
+                <button type="button" onClick={onClearSerial} className="rounded px-3 py-1 text-xs text-slate-400 hover:bg-slate-800 hover:text-white transition">Clear serial</button>
               </div>
             )}
           </div>
         </div>
 
-        {showAi && activeBoardId && (
-          <AiAssistant
-            boardType={resolveUploadBoardType()}
-            existingCode={activeCode}
-            componentNames={componentNames}
-            onApplyCode={(code) => {
-              updateActiveCode(code);
-              appendOutput('[AI] Code inserted into editor');
-              setActiveTab('output');
-            }}
-            onClose={() => setShowAi(false)}
-          />
+        {showAi && (
+          <div className="absolute bottom-0 right-0 top-[105px] z-30 flex w-[min(390px,42vw)] min-w-[320px] border-l border-violet-200 bg-white shadow-2xl">
+            <AiAssistant
+              boardType={activeBoardId ? resolveUploadBoardType() : boardType || 'esp32'}
+              existingCode={activeCode || ''}
+              componentNames={componentNames}
+              onApplyCode={(code) => {
+                if (activeBoardId) {
+                  updateActiveCode(code);
+                  appendOutput('[AI] Code inserted into editor');
+                  setActiveTab('output');
+                }
+              }}
+              onClose={() => setShowAi(false)}
+            />
+          </div>
         )}
       </div>
 
       {showBoardModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-2xl rounded-lg border border-[#3c3c3c] bg-[#252526] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[#3c3c3c] px-5 py-3">
-              <h2 className="font-semibold text-white">Select Board and Port</h2>
-              <button type="button" onClick={() => setShowBoardModal(false)}><X className="h-5 w-5 text-slate-500" /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-2xl rounded-lg border border-slate-200 bg-white shadow-2xl text-slate-700">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+              <h2 className="font-semibold text-slate-800">Select Board and Port</h2>
+              <button type="button" onClick={() => setShowBoardModal(false)}><X className="h-5 w-5 text-slate-400 hover:text-slate-600" /></button>
             </div>
-            <p className="border-b border-[#3c3c3c] px-5 py-2 text-xs text-slate-500">Verify compiles only. Upload compiles then pushes to the selected port.</p>
-            <div className="grid grid-cols-2 divide-x divide-[#3c3c3c]">
+            <p className="border-b border-slate-200 bg-slate-50 px-5 py-2 text-xs text-slate-400">Verify compiles only. Upload compiles then pushes to the selected port.</p>
+            <div className="grid grid-cols-2 divide-x divide-slate-200">
               <div className="p-4">
-                <div className="mb-2 text-xs font-bold uppercase text-slate-500">Boards</div>
-                <input type="text" placeholder="Search" value={boardSearch} onChange={(e) => setBoardSearch(e.target.value)} className="mb-2 w-full rounded border border-[#3c3c3c] bg-[#1e1e1e] px-2 py-1 text-sm" />
+                <div className="mb-2 text-xs font-bold uppercase text-slate-400">Boards</div>
+                <input type="text" placeholder="Search" value={boardSearch} onChange={(e) => setBoardSearch(e.target.value)} className="mb-2 w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-teal-500" />
                 {filteredBoards.map((b) => (
-                  <button key={b.id} type="button" onClick={() => setSelectedBoard(b.id)} className={`block w-full rounded px-2 py-1.5 text-left text-sm ${selectedBoard === b.id ? 'bg-teal-900/40 text-teal-300' : 'hover:bg-[#2d2d2d]'}`}>{b.name}</button>
+                  <button key={b.id} type="button" onClick={() => setSelectedBoard(b.id)} className={`block w-full rounded px-2 py-1.5 text-left text-sm transition ${selectedBoard === b.id ? 'bg-teal-50 text-teal-700 font-semibold shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>{b.name}</button>
                 ))}
               </div>
               <div className="p-4">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase text-slate-500">Ports</span>
-                  <button type="button" onClick={refreshPorts} className="text-[10px] text-teal-400">Refresh</button>
+                  <span className="text-xs font-bold uppercase text-slate-400">Ports</span>
+                  <button type="button" onClick={refreshPorts} className="text-[10px] text-teal-600 font-semibold">Refresh</button>
                 </div>
-                {ports.length === 0 ? <div className="py-6 text-center text-xs text-slate-500">NO PORTS DISCOVERED</div> : ports.map((p) => (
-                  <button key={p.id} type="button" onClick={() => setSelectedPort(p.id)} className={`block w-full rounded px-2 py-1.5 text-left text-sm ${selectedPort === p.id ? 'bg-teal-900/40 text-teal-300' : 'hover:bg-[#2d2d2d]'}`}>{p.label}</button>
+                {ports.length === 0 ? <div className="py-6 text-center text-xs text-slate-400">NO PORTS DISCOVERED</div> : ports.map((p) => (
+                  <button key={p.id} type="button" onClick={() => setSelectedPort(p.id)} className={`block w-full rounded px-2 py-1.5 text-left text-sm transition ${selectedPort === p.id ? 'bg-teal-50 text-teal-700 font-semibold shadow-sm' : 'text-slate-600 hover:bg-slate-50'}`}>{p.label}</button>
                 ))}
               </div>
             </div>
-            <div className="flex justify-end gap-2 border-t border-[#3c3c3c] px-5 py-3">
-              <button type="button" onClick={() => setShowBoardModal(false)} className="rounded border border-[#4a4a4a] px-4 py-1.5 text-sm">Cancel</button>
-              <button type="button" onClick={() => { onChangeBoardType(selectedBoard); setShowBoardModal(false); }} className="rounded bg-teal-600 px-4 py-1.5 text-sm font-semibold text-white">OK</button>
+            <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+              <button type="button" onClick={() => setShowBoardModal(false)} className="rounded border border-slate-300 px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+              <button type="button" onClick={() => { onChangeBoardType(selectedBoard); setShowBoardModal(false); }} className="rounded bg-teal-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-teal-700 transition">OK</button>
             </div>
           </div>
         </div>
