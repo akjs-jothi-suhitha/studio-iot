@@ -53,28 +53,28 @@ export const CodePanel: React.FC<CodePanelProps> = ({
   }, [serialLogs, activeTab]);
 
   return (
-    <div className="flex h-full w-[min(480px,38vw)] min-w-[320px] shrink-0 flex-col border-l border-[#aeb4bc] bg-[#f4f6f8] shadow-xl">
+    <div className="flex h-full w-[min(480px,38vw)] min-w-[320px] shrink-0 flex-col border-l border-[#aeb4bc] bg-[#f4f6f8] shadow-2xl shadow-black/60">
       <div className="flex items-center justify-between border-b border-[#aeb4bc] bg-[#dfe3e8] px-3 py-2.5">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Arduino</div>
-          <h2 className="text-sm font-semibold text-slate-800">Code & Serial</h2>
+          <h2 className="text-sm font-semibold text-slate-100">Code & Serial</h2>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded p-1.5 text-slate-500 transition hover:bg-white hover:text-slate-800"
+          className="rounded p-1.5 text-slate-500 transition hover:bg-[#15181e] hover:text-slate-100"
           title="Close panel"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="flex items-center gap-2 border-b border-[#aeb4bc] bg-white px-3 py-2">
+      <div className="flex items-center gap-2 border-b border-[#aeb4bc] bg-[#15181e] px-3 py-2">
         <select
           value={templateKey}
           onChange={(event) => handleTemplateChange(event.target.value)}
           disabled={isSimulating}
-          className="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-sky-500 disabled:opacity-50"
+          className="min-w-0 flex-1 rounded border border-[#323844] bg-[#15181e] px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-sky-500 disabled:opacity-50"
         >
           {TEMPLATES.map((template) => (
             <option key={template.key} value={template.key}>
@@ -85,7 +85,7 @@ export const CodePanel: React.FC<CodePanelProps> = ({
         <button
           type="button"
           onClick={handleDownload}
-          className="rounded border border-slate-200 bg-white p-1.5 text-slate-600 transition hover:bg-slate-50"
+          className="rounded border border-[#323844] bg-[#15181e] p-1.5 text-slate-300 transition hover:bg-[#1e222a]"
           title="Download sketch"
         >
           <Download className="h-4 w-4" />
@@ -98,8 +98,8 @@ export const CodePanel: React.FC<CodePanelProps> = ({
           onClick={() => setActiveTab('code')}
           className={`flex-1 py-2 text-xs font-semibold transition ${
             activeTab === 'code'
-              ? 'border-b-2 border-sky-600 bg-white text-sky-700'
-              : 'text-slate-500 hover:text-slate-700'
+              ? 'border-b-2 border-sky-600 bg-[#15181e] text-sky-700'
+              : 'text-slate-500 hover:text-slate-200'
           }`}
         >
           Code
@@ -109,8 +109,8 @@ export const CodePanel: React.FC<CodePanelProps> = ({
           onClick={() => setActiveTab('serial')}
           className={`flex-1 py-2 text-xs font-semibold transition ${
             activeTab === 'serial'
-              ? 'border-b-2 border-sky-600 bg-white text-sky-700'
-              : 'text-slate-500 hover:text-slate-700'
+              ? 'border-b-2 border-sky-600 bg-[#15181e] text-sky-700'
+              : 'text-slate-500 hover:text-slate-200'
           }`}
         >
           Serial Monitor

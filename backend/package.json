@@ -8,7 +8,9 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev --name init"
+    "prisma:migrate": "prisma migrate dev --name init",
+    "postinstall": "prisma generate",
+    "install:arduino-cli": "bash scripts/install-arduino-cli.sh"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",

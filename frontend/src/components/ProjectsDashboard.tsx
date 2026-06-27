@@ -1,5 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { FolderOpen, Plus, Trash2, Clock, Cpu, LogOut } from 'lucide-react';
+import {
+  FolderOpen,
+  Plus,
+  Trash2,
+  Clock,
+  Cpu,
+  LogOut,
+  CircuitBoard,
+  Code2,
+  LayoutDashboard,
+  Sparkles,
+  Search,
+} from 'lucide-react';
 import { api, ProjectRecord, User } from '../services/api';
 import { CODE_PRESETS } from '../utils/codePresets';
 
@@ -9,10 +21,19 @@ interface ProjectsDashboardProps {
   onLogout: () => void;
 }
 
+const BOARD_LABELS: Record<string, string> = {
+  arduino_uno: 'Arduino Uno',
+  arduino_nano: 'Arduino Nano',
+  esp32: 'ESP32',
+  esp8266: 'ESP8266',
+  arduino_mega: 'Arduino Mega',
+};
+
 export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOpenProject, onLogout }) => {
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState('');
 
   const loadProjects = async () => {
     setLoading(true);
@@ -59,83 +80,132 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOp
     loadProjects();
   };
 
+  const filtered = projects.filter((p) =>
+    p.name.toLowerCase().includes(search.toLowerCase()),
+  );
+
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="flex items-center justify-between border-b border-slate-200 bg-[#0f172a] px-6 py-4 text-white">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 font-bold">
-            SI
+    <div className="min-h-screen bg-[#0a0f1a]">
+      <header className="border-b border-white/10 bg-[#0f172a]/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 font-bold text-white shadow-lg">
+              SI
+            </div>
+            <div>
+              <div className="font-bold text-white">Studio IoT</div>
+              <div className="text-xs text-slate-500">{user.name || user.email}</div>
+            </div>
           </div>
-          <div>
-            <div className="font-bold">My Projects</div>
-            <div className="text-xs text-slate-400">{user.name || user.email}</div>
-          </div>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-sm text-slate-300 transition hover:bg-[#15181e]/5 hover:text-white"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={onLogout}
-          className="flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-800"
-        >
-          <LogOut className="h-4 w-4" />
-          Logout
-        </button>
       </header>
 
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <div className="mb-8 flex items-center justify-between">
+      <main className="mx-auto max-w-6xl px-6 py-10">
+        {/* Feature strip */}
+        <div className="mb-10 grid gap-3 sm:grid-cols-3">
+          {[
+            { icon: CircuitBoard, label: 'Circuit Studio', color: 'text-cyan-400' },
+            { icon: Code2, label: 'Code Studio', color: 'text-emerald-400' },
+            { icon: LayoutDashboard, label: 'Cloud Dashboard', color: 'text-violet-400' },
+          ].map(({ icon: Icon, label, color }) => (
+            <div key={label} className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#15181e]/5 px-4 py-3">
+              <Icon className={`h-5 w-5 ${color}`} />
+              <span className="text-sm font-semibold text-white">{label}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">Your IoT Projects</h1>
-            <p className="text-sm text-slate-500">Select a project to open the circuit editor, Arduino IDE, and dashboard.</p>
+            <h1 className="text-2xl font-bold text-white">Your Projects</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Open a project to design circuits, write code, and monitor live telemetry.
+            </p>
           </div>
           <button
             type="button"
             onClick={handleCreate}
             disabled={creating}
-            className="flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2.5 text-sm font-bold text-white shadow hover:bg-cyan-500 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 transition hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50"
           >
             <Plus className="h-4 w-4" />
             New Project
           </button>
         </div>
 
+        {projects.length > 0 && (
+          <div className="relative mb-6 max-w-sm">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search projects…"
+              className="w-full rounded-lg border border-white/10 bg-[#15181e]/5 py-2 pl-9 pr-3 text-sm text-white outline-none focus:border-cyan-500"
+            />
+          </div>
+        )}
+
         {loading ? (
-          <div className="text-center text-slate-500">Loading projects…</div>
-        ) : projects.length === 0 ? (
-          <div className="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-16 text-center">
+          <div className="py-20 text-center text-slate-500">Loading projects…</div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/15 bg-[#15181e]/5 p-16 text-center">
             <FolderOpen className="mx-auto mb-4 h-12 w-12 text-slate-300" />
-            <p className="mb-4 text-slate-600">No projects yet. Create your first circuit!</p>
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500"
-            >
-              Create Project
-            </button>
+            <p className="mb-2 text-lg font-semibold text-white">
+              {search ? 'No matching projects' : 'No projects yet'}
+            </p>
+            <p className="mb-6 text-sm text-slate-500">
+              {search ? 'Try a different search term.' : 'Create your first IoT circuit project.'}
+            </p>
+            {!search && (
+              <button
+                type="button"
+                onClick={handleCreate}
+                className="rounded-lg bg-cyan-600 px-5 py-2 text-sm font-bold text-white hover:bg-cyan-500"
+              >
+                Create Project
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => (
+            {filtered.map((project) => (
               <button
                 key={project.id}
                 type="button"
                 onClick={() => onOpenProject(project)}
-                className="group relative rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-cyan-400 hover:shadow-md"
+                className="group relative rounded-xl border border-white/10 bg-[#15181e]/5 p-5 text-left transition hover:border-cyan-500/40 hover:bg-[#15181e]/8 hover:shadow-lg hover:shadow-cyan-500/5"
               >
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-slate-100 text-cyan-600 group-hover:bg-cyan-50">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 transition group-hover:bg-cyan-500/20">
                   <Cpu className="h-6 w-6" />
                 </div>
-                <h3 className="font-bold text-slate-800">{project.name}</h3>
-                <p className="mt-1 text-xs text-slate-500 capitalize">{project.boardType?.replace('_', ' ') || 'Arduino Uno'}</p>
+                <h3 className="font-bold text-white">{project.name}</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {BOARD_LABELS[project.boardType || ''] || project.boardType?.replace(/_/g, ' ') || 'Arduino Uno'}
+                </p>
                 {project.updatedAt && (
-                  <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-400">
+                  <p className="mt-2 flex items-center gap-1 text-[10px] text-slate-500">
                     <Clock className="h-3 w-3" />
                     {new Date(project.updatedAt).toLocaleDateString()}
                   </p>
                 )}
+                <div className="mt-3 flex gap-1.5">
+                  <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[9px] font-semibold text-cyan-400">Circuit</span>
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-semibold text-emerald-400">Code</span>
+                  <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[9px] font-semibold text-violet-400">Cloud</span>
+                </div>
                 <button
                   type="button"
                   onClick={(e) => handleDelete(e, project.id)}
-                  className="absolute right-3 top-3 rounded p-1.5 text-slate-400 opacity-0 transition hover:bg-red-50 hover:text-red-500 group-hover:opacity-100"
+                  className="absolute right-3 top-3 rounded p-1.5 text-slate-500 opacity-0 transition hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -143,6 +213,11 @@ export const ProjectsDashboard: React.FC<ProjectsDashboardProps> = ({ user, onOp
             ))}
           </div>
         )}
+
+        <div className="mt-12 flex items-center justify-center gap-2 text-xs text-slate-300">
+          <Sparkles className="h-3.5 w-3.5" />
+          AI code generation available in Code Studio — set OPENAI_API_KEY in backend/.env
+        </div>
       </main>
     </div>
   );

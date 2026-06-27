@@ -92,9 +92,9 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
   };
 
   return (
-    <div className="absolute bottom-4 right-4 z-30 w-80 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl backdrop-blur-md">
+    <div className="absolute bottom-4 right-4 z-30 w-80 overflow-hidden rounded-2xl border border-[#323844]/80 bg-[#15181e] shadow-2xl backdrop-blur-md">
       <div className="flex items-center gap-2 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-cyan-50 px-4 py-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-black/20">
           <Sliders className="h-4 w-4" />
         </div>
         <div>
@@ -118,15 +118,15 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-slate-600" />
+                  <Icon className="h-4 w-4 text-slate-300" />
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-bold text-slate-800">{comp.name || def?.name}</div>
+                    <div className="truncate text-xs font-bold text-slate-100">{comp.name || def?.name}</div>
                     <div className="text-[10px] text-slate-500">{config.label}</div>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div>
-                    <div className="mb-1 flex items-center justify-between text-[10px] text-slate-600">
+                    <div className="mb-1 flex items-center justify-between text-[10px] text-slate-300">
                       <span className="flex items-center gap-1"><Thermometer className="h-3 w-3" /> Temperature</span>
                       <span className="font-mono font-bold text-rose-700">{tempC}°C</span>
                     </div>
@@ -140,7 +140,7 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
                     />
                   </div>
                   <div>
-                    <div className="mb-1 flex items-center justify-between text-[10px] text-slate-600">
+                    <div className="mb-1 flex items-center justify-between text-[10px] text-slate-300">
                       <span className="flex items-center gap-1"><Droplets className="h-3 w-3" /> Humidity</span>
                       <span className="font-mono font-bold text-blue-700">{humidity}%</span>
                     </div>
@@ -167,9 +167,9 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
               onMouseDown={(e) => e.stopPropagation()}
             >
               <div className="mb-2 flex items-center gap-2">
-                <Icon className="h-4 w-4 text-slate-600" />
+                <Icon className="h-4 w-4 text-slate-300" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-bold text-slate-800">{comp.name || def?.name}</div>
+                  <div className="truncate text-xs font-bold text-slate-100">{comp.name || def?.name}</div>
                   <div className="text-[10px] text-slate-500">{config.label}</div>
                 </div>
                 <span className="font-mono text-sm font-bold text-cyan-700">
@@ -195,7 +195,7 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
                     const next = Math.max(config.min, Math.min(config.max, Number(e.target.value) || 0));
                     onValueChange(comp.id, next);
                   }}
-                  className="w-20 rounded-md border border-slate-200 px-2 py-1 text-xs font-mono outline-none focus:border-cyan-500"
+                  className="w-20 rounded-md border border-[#323844] px-2 py-1 text-xs font-mono outline-none focus:border-cyan-500"
                 />
                 <span className="text-[10px] text-slate-500">
                   {config.min} – {config.max}{config.unit ? ` ${config.unit}` : ''}
@@ -212,7 +212,7 @@ export const SimulationSensorPanel: React.FC<SimulationSensorPanelProps> = ({
           );
         })}
       </div>
-      <p className="border-t border-slate-100 bg-slate-50 px-3 py-2 text-[9px] text-slate-500">
+      <p className="border-t border-[#272c36] bg-[#1e222a] px-3 py-2 text-[9px] text-slate-500">
         Components are locked during simulation. Adjust values here; use push buttons on the workplane.
       </p>
     </div>

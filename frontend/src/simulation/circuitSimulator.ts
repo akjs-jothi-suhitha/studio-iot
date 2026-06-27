@@ -93,11 +93,11 @@ export class CircuitSimulator {
     this.onStateUpdate({ ...this.state });
   }
 
-  start(code: string, mode: 'circuit' | 'code' = 'circuit') {
+  start(code: string, mode: 'circuit' | 'code' = 'circuit', boardType = 'arduino_uno') {
     this.simulating = true;
     this.mode = mode;
     this.state = this.getInitialState();
-    this.state.serialLogs = [`--- Simulation Started (${mode.toUpperCase()} MODE) ---`];
+    this.state.serialLogs = [`--- Simulation Started (${mode.toUpperCase()} MODE) — ${boardType} ---`];
     
     // Validate circuit before running
     const validationErrors = this.validateCircuit();
@@ -115,18 +115,19 @@ export class CircuitSimulator {
     if (this.mode === 'code') {
       this.runArduinoCode(code);
       
-      // Optionally run compile check
-      fetch('http://localhost:3001/api/compile', {
+      fetch('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codeText: code, boardType: 'arduino_uno' })
+        body: JSON.stringify({ codeText: code, boardType })
       }).then(res => res.json()).then(data => {
         if (data.success) {
-          this.logSerial(`[CLI] Compilation successful. Flash: ${data.memory.flash.used} bytes (${data.memory.flash.percentage}%), SRAM: ${data.memory.sram.used} bytes (${data.memory.sram.percentage}%)`);
+          this.logSerial(`[CLI] Compilation successful. Flash: ${data.memory?.flash?.used ?? '?'} bytes, SRAM: ${data.memory?.sram?.used ?? '?'} bytes`);
         } else {
-          this.logSerial(`[CLI Error] ${data.error}`);
+          this.logSerial(`[CLI Error] ${data.error || 'Compilation failed'}`);
+          this.state.validationErrors = [...this.state.validationErrors, `Compile error: ${data.error || 'failed'}`];
+          this.onStateUpdate({ ...this.state });
         }
-      }).catch(err => {
+      }).catch(() => {
         this.logSerial(`[CLI Info] Offline compilation skipped. Using browser simulation engine.`);
       });
     }
@@ -267,9 +268,12 @@ export class CircuitSimulator {
         const comp = this.components.find(c => c.id === compId);
         if (!comp) continue;
 
-        if (comp.type === 'arduino_uno') {
+        if (comp.type === 'arduino_uno' || comp.type === 'arduino_nano') {
           if (pinId === 'pin_5v' || pinId === 'pin_3v3') hasPower = true;
           if (pinId.startsWith('pin_gnd')) hasGnd = true;
+        } else if (comp.type === 'esp32' || comp.type === 'esp8266') {
+          if (pinId.includes('3v3') || pinId === 'pin_vin' || pinId === 'pin_5v') hasPower = true;
+          if (pinId.includes('gnd')) hasGnd = true;
         } else if (comp.type.startsWith('battery_')) {
           if (pinId === 'positive') hasPower = true;
           if (pinId === 'negative') hasGnd = true;
@@ -336,7 +340,7 @@ export class CircuitSimulator {
         const comp = this.components.find(c => c.id === compId);
         if (!comp) continue;
 
-        if (comp.type === 'arduino_uno') {
+        if (comp.type === 'arduino_uno' || comp.type === 'arduino_nano') {
           if (pinId === 'pin_gnd1' || pinId === 'pin_gnd2' || pinId === 'pin_gnd3') {
             isGnd = true;
           } else if (pinId === 'pin_5v') {
@@ -346,12 +350,24 @@ export class CircuitSimulator {
           } else if (pinId.startsWith('pin_') && !pinId.startsWith('pin_a')) {
             const digitalPinNum = pinId.replace('pin_', '');
             const mode = this.state.pinModes[digitalPinNum];
-            // In Circuit Mode, maybe pins are floating, or we just rely on 5V and GND.
-            // If Code mode is active, the transpiler controls digitalPins.
             if (mode === 'OUTPUT') {
               isDigital = true;
               const val = this.state.digitalPins[digitalPinNum] || 0;
               activeDigitalValue = Math.max(activeDigitalValue, val);
+            }
+          }
+        }
+
+        if (comp.type === 'esp32' || comp.type === 'esp8266') {
+          if (pinId.includes('gnd')) isGnd = true;
+          if (pinId === 'pin_3v3' || pinId === 'pin_3v3_2') powerVal = Math.max(powerVal, 3.3);
+          if (pinId === 'pin_vin' || pinId === 'pin_5v') powerVal = Math.max(powerVal, 5);
+          if (pinId.startsWith('pin_') && !pinId.includes('gnd') && !pinId.includes('3v3') && !pinId.includes('vin')) {
+            const pinNum = pinId.replace('pin_', '').replace('d', '');
+            const mode = this.state.pinModes[pinNum];
+            if (mode === 'OUTPUT') {
+              isDigital = true;
+              activeDigitalValue = Math.max(activeDigitalValue, this.state.digitalPins[pinNum] || 0);
             }
           }
         }

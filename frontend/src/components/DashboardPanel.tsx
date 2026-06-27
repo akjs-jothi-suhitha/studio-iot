@@ -357,16 +357,22 @@ export const DashboardPanel: React.FC<DashboardPanelProps> = ({
                 ['progress', Sliders, 'Progress Bar', 'text-cyan-500'],
                 ['button', MousePointerClick, 'Push Button', 'text-slate-500'],
                 ['terminal', Terminal, 'Terminal', 'text-slate-700'],
-              ].map(([type, Icon, label, color]) => (
+              ].map((entry) => {
+                const type = entry[0] as DashboardWidget['type'];
+                const Icon = entry[1] as React.FC<{ className?: string }>;
+                const label = entry[2] as string;
+                const color = entry[3] as string;
+                return (
                 <button
-                  key={type as string}
-                  onClick={() => handleAddWidget(type as DashboardWidget['type'])}
+                  key={type}
+                  onClick={() => handleAddWidget(type)}
                   className="w-full px-4 py-2 text-left hover:bg-slate-50 flex items-center space-x-2 text-slate-700"
                 >
                   <Icon className={`w-4 h-4 ${color}`} />
                   <span>{label}</span>
                 </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

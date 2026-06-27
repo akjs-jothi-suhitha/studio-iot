@@ -11,7 +11,7 @@ export interface BoardCodeFiles {
   activeTab?: Record<string, string>;
 }
 
-export const PROGRAMMABLE_BOARD_TYPES: ComponentType[] = ['arduino_uno', 'esp32'];
+export const PROGRAMMABLE_BOARD_TYPES: ComponentType[] = ['arduino_uno', 'arduino_nano', 'esp32', 'esp8266'];
 
 export const DEFAULT_SKETCH = `void setup() {
   Serial.begin(9600);
@@ -47,15 +47,41 @@ export const getProgrammableBoardIds = (components: { id: string; type: string }
 /** @deprecated use getProgrammableBoardIds */
 export const getArduinoIds = getProgrammableBoardIds;
 
+export const ESP8266_SKETCH = `// ESP8266 NodeMCU sketch
+const char* ssid = "YOUR_WIFI";
+const char* pass = "YOUR_PASSWORD";
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("ESP8266 ready");
+}
+
+void loop() {
+  delay(1000);
+}
+`;
+
 export const getBoardLabel = (comp?: ComponentInstance): string => {
   if (!comp) return 'board';
   if (comp.type === 'esp32') return 'esp32';
+  if (comp.type === 'esp8266') return 'esp8266';
+  if (comp.type === 'arduino_nano') return 'nano';
   const match = comp.name.match(/(\d+)/);
   return match ? `arduino_${match[1]}` : 'arduino_1';
 };
 
-export const defaultSketchForBoard = (type: ComponentType): string =>
-  type === 'esp32' ? ESP32_BLYNK_SKETCH : DEFAULT_SKETCH;
+export const defaultSketchForBoard = (type: ComponentType): string => {
+  if (type === 'esp32') return ESP32_BLYNK_SKETCH;
+  if (type === 'esp8266') return ESP8266_SKETCH;
+  return DEFAULT_SKETCH;
+};
+
+export const boardTypeFromComponent = (type?: ComponentType): string => {
+  if (type === 'esp32') return 'esp32';
+  if (type === 'esp8266') return 'esp8266';
+  if (type === 'arduino_nano') return 'arduino_nano';
+  return 'arduino_uno';
+};
 
 export const parseBoardCodes = (codeText: string, boardIds: string[], components?: ComponentInstance[]): BoardCodeFiles => {
   const compMap = new Map(components?.map((c) => [c.id, c]) || []);
@@ -149,5 +175,7 @@ export const removeSketchTab = (data: BoardCodeFiles, boardId: string, tab: stri
 
 export const fqbnForComponent = (type?: ComponentType): string => {
   if (type === 'esp32') return 'esp32:esp32:esp32';
+  if (type === 'esp8266') return 'esp8266:esp8266:nodemcuv2';
+  if (type === 'arduino_nano') return 'arduino:avr:nano:cpu=atmega328old';
   return 'arduino:avr:uno';
 };

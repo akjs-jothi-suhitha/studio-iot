@@ -44,10 +44,20 @@ const buildWokwiProps = (
         ledRX: false,
         ledTX: false,
       };
+    case 'arduino_nano':
+      return {
+        ledBuiltIn: onboardLed13,
+        ledPower: isSimulating,
+      };
     case 'esp32':
       return {
         ledPower: isSimulating,
         led1: false,
+      };
+    case 'esp8266':
+      return {
+        ledPower: isSimulating,
+        ledBlue: isSimulating,
       };
     case 'led':
       return {
@@ -180,7 +190,7 @@ export const CircuitComponent: React.FC<CircuitComponentProps> = (componentProps
         overflow="visible"
         pointerEvents="none"
       >
-        <div xmlns="http://www.w3.org/1999/xhtml" style={{ width, height, overflow: 'visible', pointerEvents: 'none' }}>
+        <div style={{ width, height, overflow: 'visible', pointerEvents: 'none' }}>
           <WokwiElementHost
             tag={wokwi.wokwiTag}
             width={width}

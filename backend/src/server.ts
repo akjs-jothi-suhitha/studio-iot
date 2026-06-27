@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import dotenv from 'dotenv';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PrismaClient } from '@prisma/client';
 import http from 'http';
@@ -11,14 +12,32 @@ import path from 'path';
 import os from 'os';
 import crypto from 'crypto';
 
+dotenv.config();
+
 const execAsync = promisify(exec);
 
+function extractCliError(err: unknown): string {
+  if (!err || typeof err !== 'object') return 'Unknown error';
+  const e = err as { message?: string; stderr?: string; stdout?: string };
+  const stderr = e.stderr?.trim();
+  const stdout = e.stdout?.trim();
+  if (stderr && stdout) return `${stderr}\n${stdout}`;
+  return stderr || stdout || e.message || 'Command failed';
+}
+
 async function resolveArduinoCli(): Promise<string | null> {
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  const projectBin = path.join(process.cwd(), 'bin', 'arduino-cli');
   const candidates = [
+    process.env.ARDUINO_CLI_PATH,
     'arduino-cli',
+    projectBin,
+    path.join(home, '.local', 'bin', 'arduino-cli'),
+    '/usr/local/bin/arduino-cli',
+    '/opt/homebrew/bin/arduino-cli',
     path.join(process.env.LOCALAPPDATA || '', 'Arduino CLI', 'arduino-cli.exe'),
     path.join(process.env.ProgramFiles || '', 'Arduino CLI', 'arduino-cli.exe'),
-  ];
+  ].filter(Boolean) as string[];
   for (const cli of candidates) {
     try {
       await execAsync(`"${cli}" version`);
@@ -41,9 +60,32 @@ async function getArduinoCli(): Promise<string | null> {
 
 function resolveFqbn(boardType?: string): string {
   if (boardType === 'esp32') return 'esp32:esp32:esp32';
-  if (boardType === 'arduino_nano') return 'arduino:avr:nano';
+  if (boardType === 'esp8266') return 'esp8266:esp8266:nodemcuv2';
+  if (boardType === 'arduino_nano') return 'arduino:avr:nano:cpu=atmega328old';
   if (boardType === 'arduino_mega') return 'arduino:avr:mega';
   return 'arduino:avr:uno';
+}
+
+const ensuredCores = new Set<string>();
+
+async function ensureBoardCore(cli: string, boardType?: string): Promise<void> {
+  const fqbn = resolveFqbn(boardType);
+  const coreKey = fqbn.split(':').slice(0, 2).join(':');
+  if (ensuredCores.has(coreKey)) return;
+
+  try {
+    await execAsync(`"${cli}" core update-index`);
+    if (boardType === 'esp32') {
+      await execAsync(`"${cli}" core install esp32:esp32`);
+    } else if (boardType === 'esp8266') {
+      await execAsync(`"${cli}" core install esp8266:esp8266`);
+    } else if (boardType?.startsWith('arduino')) {
+      await execAsync(`"${cli}" core install arduino:avr`);
+    }
+    ensuredCores.add(coreKey);
+  } catch (err) {
+    console.warn(`Core install warning for ${coreKey}:`, extractCliError(err));
+  }
 }
 
 async function createSketchDir(codeText: string): Promise<string> {
@@ -73,12 +115,19 @@ let usersMockDb: any[] = [
   }
 ];
 
-try {
-  prisma = new PrismaClient();
-  console.log('Prisma client initialized successfully.');
-} catch (e) {
-  console.warn('Prisma client initialization failed. Falling back to in-memory store:', e);
-  prisma = null;
+async function connectDatabase(): Promise<void> {
+  try {
+    const client = new PrismaClient();
+    await client.$connect();
+    prisma = client;
+    console.log('Prisma connected (SQLite).');
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn('Prisma unavailable — using in-memory store.');
+    console.warn(`  Reason: ${msg.split('\n')[0]}`);
+    console.warn('  Fix: cd backend && npm run prisma:generate && npm run dev');
+    prisma = null;
+  }
 }
 
 // 1. Authentication APIs
@@ -233,10 +282,11 @@ app.delete('/api/projects/:id', async (req, res) => {
 // Board list for Arduino IDE
 app.get('/api/boards', (_req, res) => {
   return res.json([
-    { id: 'arduino_uno', name: 'Arduino Uno', fqbn: 'arduino:avr:uno' },
-    { id: 'arduino_nano', name: 'Arduino Nano', fqbn: 'arduino:avr:nano' },
+    { id: 'arduino_uno', name: 'Arduino Uno R3', fqbn: 'arduino:avr:uno' },
+    { id: 'arduino_nano', name: 'Arduino Nano', fqbn: 'arduino:avr:nano:cpu=atmega328old' },
     { id: 'arduino_mega', name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega' },
     { id: 'esp32', name: 'ESP32 Dev Module', fqbn: 'esp32:esp32:esp32' },
+    { id: 'esp8266', name: 'ESP8266 NodeMCU', fqbn: 'esp8266:esp8266:nodemcuv2' },
   ]);
 });
 
@@ -250,12 +300,9 @@ app.get('/api/ports', async (_req, res) => {
       connected: true,
     }));
     return res.json(formattedPorts);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Error fetching ports:', err);
-    return res.json([
-      { id: 'COM3', label: 'COM3 — Unknown', connected: false },
-      { id: 'COM6', label: 'COM6 — Arduino Uno', connected: true },
-    ]);
+    return res.json([]);
   }
 });
 
@@ -275,18 +322,19 @@ app.post('/api/upload', async (req, res) => {
     if (!cli) {
       return res.status(400).json({
         success: false,
-        error: 'arduino-cli is not installed or not on PATH. Run backend/scripts/install-arduino-cli.ps1, then restart your terminal and the backend server.',
+        error: 'arduino-cli is not installed or not on PATH. Install via: brew install arduino-cli (macOS) or see backend/scripts/install-arduino-cli.ps1 (Windows). Then restart the backend.',
       });
     }
 
+    await ensureBoardCore(cli, boardType);
     await execAsync(`"${cli}" compile --fqbn ${fqbn} "${sketchDir}"`);
-    const { stdout } = await execAsync(`"${cli}" upload -p ${port} --fqbn ${fqbn} "${sketchDir}"`);
+    const { stdout } = await execAsync(`"${cli}" upload -p "${port}" --fqbn ${fqbn} "${sketchDir}"`);
     return res.json({
       success: true,
       message: `Sketch uploaded to ${boardType || 'arduino_uno'} on ${port}\n${stdout}`,
     });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, error: err.message || err.stderr || 'Upload failed' });
+  } catch (err: unknown) {
+    return res.status(500).json({ success: false, error: extractCliError(err) });
   } finally {
     if (sketchDir) {
       try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
@@ -300,7 +348,7 @@ app.get('/api/cli-status', async (_req, res) => {
   if (!cli) {
     return res.json({
       installed: false,
-      message: 'arduino-cli not found. Run backend/scripts/install-arduino-cli.ps1 then restart the terminal and backend server.',
+      message: 'arduino-cli not found. macOS (no Homebrew): npm run install:arduino-cli — Windows: backend/scripts/install-arduino-cli.ps1',
     });
   }
   try {
@@ -329,11 +377,12 @@ app.post('/api/compile', async (req, res) => {
     if (!cli) {
       return res.status(400).json({
         success: false,
-        error: 'arduino-cli is not installed or not on PATH. Run backend/scripts/install-arduino-cli.ps1, then restart your terminal and the backend server.',
+        error: 'arduino-cli is not installed or not on PATH. Install via: brew install arduino-cli (macOS) or see backend/scripts/install-arduino-cli.ps1 (Windows). Then restart the backend.',
       });
     }
 
-    const { stdout, stderr } = await execAsync(`"${cli}" compile --fqbn ${fqbn} "${sketchDir}"`);
+    await ensureBoardCore(cli, boardType);
+    const { stdout } = await execAsync(`"${cli}" compile --fqbn ${fqbn} "${sketchDir}"`);
     
     // Simulate memory stats since parsing arduino-cli output can be complex,
     // or we could parse it if we regex it. For simplicity, just return success.
@@ -348,15 +397,98 @@ app.post('/api/compile', async (req, res) => {
         sram: { used: sramUsage, total: 2048, percentage: ((sramUsage / 2048) * 100).toFixed(1) }
       }
     });
-  } catch (err: any) {
-    return res.status(400).json({ 
-      success: false, 
-      error: err.stderr || err.stdout || err.message || 'Compilation failed' 
+  } catch (err: unknown) {
+    return res.status(400).json({
+      success: false,
+      error: extractCliError(err),
     });
   } finally {
     if (sketchDir) {
       try { await fs.rm(sketchDir, { recursive: true, force: true }); } catch (e) {}
     }
+  }
+});
+
+// AI code generation for Code Studio
+app.post('/api/ai/generate', async (req, res) => {
+  const { prompt, boardType, existingCode, components } = req.body as {
+    prompt?: string;
+    boardType?: string;
+    existingCode?: string;
+    components?: string[];
+  };
+
+  if (!prompt?.trim()) {
+    return res.status(400).json({ error: 'Prompt is required' });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({
+      error: 'OPENAI_API_KEY is not configured. Add it to backend/.env (see backend/.env.example).',
+    });
+  }
+
+  const board = boardType || 'arduino_uno';
+  const componentList = Array.isArray(components) && components.length > 0
+    ? components.join(', ')
+    : 'general IoT sensors and actuators';
+
+  const systemPrompt = `You are an expert embedded systems engineer. Generate Arduino/ESP32 C++ sketch code.
+Board: ${board}
+Wired components: ${componentList}
+Rules:
+- Output ONLY valid C++ sketch code (no markdown fences, no explanations)
+- Include void setup() and void loop()
+- Use appropriate libraries for the board
+- For ESP32/ESP8266 use correct pin numbering and Serial.begin(115200)
+- Add brief inline comments for clarity`;
+
+  const userContent = existingCode?.trim()
+    ? `Existing code:\n${existingCode}\n\nUser request: ${prompt}`
+    : prompt;
+
+  const apiBase = process.env.OPENAI_API_BASE || 'https://api.openai.com/v1';
+
+  try {
+    const response = await fetch(`${apiBase}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent },
+        ],
+        temperature: 0.3,
+        max_tokens: 2048,
+      }),
+    });
+
+    const data = await response.json() as {
+      error?: { message?: string };
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: data.error?.message || `AI request failed (${response.status})`,
+      });
+    }
+
+    let code = data.choices?.[0]?.message?.content?.trim() || '';
+    code = code.replace(/^```(?:cpp|arduino|c\+\+)?\n?/i, '').replace(/\n?```$/i, '').trim();
+
+    if (!code) {
+      return res.status(502).json({ error: 'AI returned empty code. Try a more specific prompt.' });
+    }
+
+    return res.json({ code });
+  } catch (err: unknown) {
+    return res.status(500).json({ error: extractCliError(err) });
   }
 });
 
@@ -434,6 +566,14 @@ app.post('/api/telemetry', async (req, res) => {
 
 
 // Start REST server
-server.listen(PORT, () => {
-  console.log(`Express API Server listening on port ${PORT}`);
+async function startServer() {
+  await connectDatabase();
+  server.listen(PORT, () => {
+    console.log(`Express API Server listening on port ${PORT}`);
+  });
+}
+
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

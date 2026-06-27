@@ -67,12 +67,12 @@ export const CircuitCodePanel: React.FC<CircuitCodePanelProps> = ({
               <button type="button" onClick={autoCode} disabled={isSimulating} title="Auto-generate code" className="rounded p-1 text-teal-400 hover:bg-[#3c3c3c] disabled:opacity-40">
                 <Sparkles className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={() => setFontSize((s) => Math.max(10, s - 1))} className="rounded px-1 text-[10px] text-slate-400 hover:bg-[#3c3c3c]">A−</button>
-              <button type="button" onClick={() => setFontSize((s) => Math.min(20, s + 1))} className="rounded px-1 text-[10px] text-slate-400 hover:bg-[#3c3c3c]">A+</button>
+              <button type="button" onClick={() => setFontSize((s) => Math.max(10, s - 1))} className="rounded px-1 text-[10px] text-slate-500 hover:bg-[#3c3c3c]">A−</button>
+              <button type="button" onClick={() => setFontSize((s) => Math.min(20, s + 1))} className="rounded px-1 text-[10px] text-slate-500 hover:bg-[#3c3c3c]">A+</button>
             </div>
           </>
         )}
-        <button type="button" onClick={() => setExpanded(!expanded)} className="rounded p-1 text-slate-400 hover:bg-[#3c3c3c]">
+        <button type="button" onClick={() => setExpanded(!expanded)} className="rounded p-1 text-slate-500 hover:bg-[#3c3c3c]">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <Code2 className="h-4 w-4 text-teal-400" />}
         </button>
       </div>

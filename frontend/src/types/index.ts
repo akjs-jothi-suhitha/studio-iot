@@ -1,6 +1,8 @@
 export type ComponentType =
   | 'arduino_uno'
+  | 'arduino_nano'
   | 'esp32'
+  | 'esp8266'
   | 'breadboard_small'
   | 'resistor'
   | 'led'
@@ -63,7 +65,7 @@ export interface Wire {
 
 export type ViewMode = 'circuit' | 'dashboard' | 'arduino';
 
-export type BoardType = 'arduino_uno' | 'arduino_nano' | 'arduino_mega' | 'esp32';
+export type BoardType = 'arduino_uno' | 'arduino_nano' | 'arduino_mega' | 'esp32' | 'esp8266';
 
 export interface ProjectState {
   components: ComponentInstance[];

@@ -13,6 +13,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@wokwi/elements": "^1.9.2",
     "lucide-react": "^1.21.0",
+    "mqtt": "^5.15.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

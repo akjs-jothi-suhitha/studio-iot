@@ -10,7 +10,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { ProjectsDashboard } from './components/ProjectsDashboard';
 import { CODE_PRESETS } from './utils/codePresets';
 import { COMPONENT_DEFINITIONS } from './utils/componentDefinitions';
-import { parseBoardCodes, serializeBoardCodes, getProgrammableBoardIds, BoardCodeFiles, defaultSketchForBoard } from './utils/boardCodes';
+import { parseBoardCodes, serializeBoardCodes, getProgrammableBoardIds, BoardCodeFiles, defaultSketchForBoard, boardTypeFromComponent } from './utils/boardCodes';
 import { suggestCodeForBoard } from './utils/componentCodeSnippets';
 import { ComponentType, ComponentInstance, Wire, DashboardWidget, ProjectState, ViewMode, BoardType, BlynkDatastream } from './types';
 import { CircuitSimulator, SimulationState } from './simulation/circuitSimulator';
@@ -257,9 +257,13 @@ export const App: React.FC = () => {
     name:
       type === 'arduino_uno'
         ? `Arduino Uno ${components.filter((c) => c.type === 'arduino_uno').length + 1}`
-        : type === 'esp32'
-          ? `ESP32 ${components.filter((c) => c.type === 'esp32').length + 1}`
-          : `${COMPONENT_DEFINITIONS[type]?.name || type} ${components.length + 1}`,
+        : type === 'arduino_nano'
+          ? `Arduino Nano ${components.filter((c) => c.type === 'arduino_nano').length + 1}`
+          : type === 'esp32'
+            ? `ESP32 ${components.filter((c) => c.type === 'esp32').length + 1}`
+            : type === 'esp8266'
+              ? `ESP8266 ${components.filter((c) => c.type === 'esp8266').length + 1}`
+              : `${COMPONENT_DEFINITIONS[type]?.name || type} ${components.length + 1}`,
     x,
     y,
     rotation: 0,
@@ -293,13 +297,15 @@ export const App: React.FC = () => {
     setIsWireSelected(false);
     setPendingComponentType(null);
 
-    if (type === 'arduino_uno' || type === 'esp32') {
+    if (type === 'arduino_uno' || type === 'arduino_nano' || type === 'esp32' || type === 'esp8266') {
       const suggested = suggestCodeForBoard(newComp.id, nextComps, wires);
       setBoardCodes((prev) => ({
         activeBoardId: newComp.id,
         files: { ...prev.files, [newComp.id]: suggested },
       }));
       if (type === 'esp32') setBoardType('esp32');
+      else if (type === 'esp8266') setBoardType('esp8266');
+      else if (type === 'arduino_nano') setBoardType('arduino_nano');
     }
 
     pushHistory(nextComps, wires);
@@ -416,7 +422,7 @@ export const App: React.FC = () => {
     const hasPower = components.some((c) =>
       ['battery_9v', 'battery_aa', 'battery_coin'].includes(c.type),
     );
-    if (!hasBoard) errors.push('Add an Arduino Uno or ESP32 board to the circuit.');
+    if (!hasBoard) errors.push('Add a board (Arduino Uno/Nano, ESP32, or ESP8266) to the circuit.');
     if (!hasPower && wires.length > 0) {
       const hasPowerWire = wires.some((w) => {
         const fromPin = w.fromPinId;
@@ -446,11 +452,14 @@ export const App: React.FC = () => {
       const errors = validateBeforeSimulation();
       if (errors.length > 0) {
         setValidationErrors(errors);
+        setViewMode('circuit');
         return;
       }
       setValidationErrors([]);
+      const activeBoard = components.find((c) => c.id === (boardCodes.activeBoardId || getProgrammableBoardIds(components)[0]));
+      const simBoardType = boardTypeFromComponent(activeBoard?.type as ComponentType);
       setIsSimulating(true);
-      simulatorRef.current?.start(activeSketchCode, 'code');
+      simulatorRef.current?.start(activeSketchCode, 'code', simBoardType);
     }
   };
 
@@ -551,7 +560,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 font-sans text-slate-800 antialiased">
+    <div className="flex h-screen flex-col overflow-hidden bg-[#272c36] font-sans text-slate-100 antialiased">
       <Toolbar
         viewMode={viewMode}
         onChangeViewMode={setViewMode}
@@ -604,7 +613,7 @@ export const App: React.FC = () => {
               }
               if (id && !isWire) {
                 const comp = components.find((c) => c.id === id);
-                if (comp && (comp.type === 'arduino_uno' || comp.type === 'esp32')) {
+                if (comp && (comp.type === 'arduino_uno' || comp.type === 'arduino_nano' || comp.type === 'esp32' || comp.type === 'esp8266')) {
                   setBoardCodes((prev) => ({ ...prev, activeBoardId: id }));
                 }
               }

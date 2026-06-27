@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   Upload,
-  Bug,
   FolderOpen,
   BookOpen,
   Search,
@@ -28,9 +27,11 @@ import {
   setSketchContent,
   addSketchTab,
   removeSketchTab,
+  boardTypeFromComponent,
   mainTabName,
 } from '../utils/boardCodes';
 import { suggestCodeForBoard } from '../utils/componentCodeSnippets';
+import { AiAssistant } from './AiAssistant';
 
 interface ArduinoIDEPanelProps {
   boardCodes: BoardCodeFiles;
@@ -59,10 +60,11 @@ const EXTENSIONS = [
 ];
 
 const BOARD_OPTIONS: BoardInfo[] = [
-  { id: 'arduino_uno', name: 'Arduino Uno', fqbn: 'arduino:avr:uno' },
-  { id: 'arduino_nano', name: 'Arduino Nano', fqbn: 'arduino:avr:nano' },
+  { id: 'arduino_uno', name: 'Arduino Uno R3', fqbn: 'arduino:avr:uno' },
+  { id: 'arduino_nano', name: 'Arduino Nano', fqbn: 'arduino:avr:nano:cpu=atmega328old' },
   { id: 'arduino_mega', name: 'Arduino Mega 2560', fqbn: 'arduino:avr:mega' },
   { id: 'esp32', name: 'ESP32 Dev Module', fqbn: 'esp32:esp32:esp32' },
+  { id: 'esp8266', name: 'ESP8266 NodeMCU', fqbn: 'esp8266:esp8266:nodemcuv2' },
 ];
 
 export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
@@ -92,7 +94,13 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
   const [libraryUrl, setLibraryUrl] = useState('');
   const [serialInput, setSerialInput] = useState('');
   const [cliStatus, setCliStatus] = useState<{ installed: boolean; version?: string; message?: string } | null>(null);
+  const [showAi, setShowAi] = useState(false);
   const logsEndRef = useRef<HTMLDivElement>(null);
+
+  const resolveUploadBoardType = (): string => {
+    if (activeBoardComp?.type) return boardTypeFromComponent(activeBoardComp.type);
+    return boardType;
+  };
 
   const programmableBoards = useMemo(
     () => components.filter((c) => getProgrammableBoardIds(components).includes(c.id)),
@@ -101,10 +109,15 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
 
   const activeBoardId = boardCodes.activeBoardId || programmableBoards[0]?.id || null;
   const activeBoardComp = programmableBoards.find((b) => b.id === activeBoardId);
+
+  const componentNames = useMemo(
+    () => components.filter((c) => c.id !== activeBoardId).map((c) => c.name || c.type),
+    [components, activeBoardId],
+  );
   const activeTabName = activeBoardId ? getActiveTabName(activeBoardId, activeBoardComp, boardCodes) : 'sketch.ino';
   const activeCode = activeBoardId ? getSketchContent(activeBoardId, activeTabName, activeBoardComp, boardCodes) : '';
 
-  const boardName = BOARD_OPTIONS.find((b) => b.id === (activeBoardComp?.type === 'esp32' ? 'esp32' : boardType))?.name || 'Board';
+  const boardName = BOARD_OPTIONS.find((b) => b.id === resolveUploadBoardType())?.name || 'Board';
   const activeBoardName = activeBoardComp?.name || 'Sketch';
 
   const refreshPorts = useCallback(async () => {
@@ -183,7 +196,7 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
     setActiveTab('output');
     appendOutput(`[Verify] Compiling sketch for ${boardName}…`);
     try {
-      const result = await api.compile(activeCode, activeBoardComp?.type === 'esp32' ? 'esp32' : boardType);
+      const result = await api.compile(activeCode, resolveUploadBoardType());
       if (result.success) {
         appendOutput(`[Verify] ✓ Compilation successful.`);
         if (result.message) appendOutput(result.message);
@@ -211,7 +224,7 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
     setActiveTab('output');
     appendOutput(`[Upload] Compiling and uploading to ${selectedPort}…`);
     try {
-      const uploadBoard = activeBoardComp?.type === 'esp32' ? 'esp32' : boardType;
+      const uploadBoard = resolveUploadBoardType();
       const uploadResult = await api.upload(activeCode, uploadBoard, selectedPort);
       if (uploadResult.success) {
         appendOutput(`[Upload] ✓ ${uploadResult.message || 'Done!'}`);
@@ -254,9 +267,23 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
         >
           <Upload className="h-4 w-4" />
         </button>
-        <button type="button" title="Debug" className="flex h-9 w-9 items-center justify-center rounded-full bg-[#3c3c3c] text-slate-500">
-          <Bug className="h-4 w-4" />
+        <button
+          type="button"
+          onClick={() => setShowAi((v) => !v)}
+          title="AI Code Assistant"
+          className={`flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition ${
+            showAi ? 'bg-violet-600 text-white' : 'bg-[#3c3c3c] text-violet-300 hover:bg-[#4a4a4a]'
+          }`}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          AI Bot
         </button>
+
+        {cliStatus && !cliStatus.installed && (
+          <span className="ml-1 max-w-[200px] truncate text-[10px] text-amber-400" title={cliStatus.message}>
+            ⚠ CLI not found
+          </span>
+        )}
 
         <button
           type="button"
@@ -295,7 +322,7 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
           <button type="button" onClick={() => setFontSize((s) => Math.max(10, s - 1))} className="rounded p-1.5 hover:bg-[#3c3c3c]">
             <Minus className="h-4 w-4" />
           </button>
-          <span className="min-w-8 text-center text-xs text-slate-400">{fontSize}</span>
+          <span className="min-w-8 text-center text-xs text-slate-500">{fontSize}</span>
           <button type="button" onClick={() => setFontSize((s) => Math.min(24, s + 1))} className="rounded p-1.5 hover:bg-[#3c3c3c]">
             <Plus className="h-4 w-4" />
           </button>
@@ -314,7 +341,7 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
               key={id}
               type="button"
               onClick={() => setSidebar(sidebar === id ? null : id)}
-              className={`relative flex h-10 w-10 items-center justify-center rounded ${sidebar === id ? 'text-teal-400' : 'text-slate-400 hover:text-white'}`}
+              className={`relative flex h-10 w-10 items-center justify-center rounded ${sidebar === id ? 'text-teal-400' : 'text-slate-500 hover:text-white'}`}
             >
               {sidebar === id && <span className="absolute left-0 top-1 bottom-1 w-0.5 bg-teal-400" />}
               <Icon className="h-5 w-5" />
@@ -367,7 +394,7 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
                             {tab}
                           </button>
                           {tab !== mainTabName(activeBoardComp) && (
-                            <button type="button" onClick={() => handleDeleteFile(tab)} className="rounded p-0.5 text-slate-600 opacity-0 hover:text-red-400 group-hover:opacity-100">
+                            <button type="button" onClick={() => handleDeleteFile(tab)} className="rounded p-0.5 text-slate-300 opacity-0 hover:text-red-400 group-hover:opacity-100">
                               <Trash2 className="h-3 w-3" />
                             </button>
                           )}
@@ -510,8 +537,8 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
                 }}
               />
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-slate-500">
-                Place an Arduino Uno or ESP32 on the circuit to write code.
+              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-slate-500">
+                Place a board (Arduino Uno/Nano, ESP32, or ESP8266) on the circuit in Circuit Studio to write code.
               </div>
             )}
             {isSimulating && (
@@ -521,35 +548,83 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
             )}
           </div>
 
-          <div className="flex h-44 shrink-0 flex-col border-t border-[#3c3c3c] bg-[#1e1e1e]">
-            <div className="flex shrink-0 border-b border-[#3c3c3c]">
-              <button type="button" onClick={() => setActiveTab('output')} className={`px-4 py-1.5 text-xs font-semibold ${activeTab === 'output' ? 'border-b-2 border-teal-400 text-teal-400' : 'text-slate-500'}`}>Output</button>
-              <button type="button" onClick={() => setActiveTab('serial')} className={`px-4 py-1.5 text-xs font-semibold ${activeTab === 'serial' ? 'border-b-2 border-teal-400 text-teal-400' : 'text-slate-500'}`}>Serial Monitor</button>
+          <div className="flex h-52 shrink-0 flex-col border-t border-[#3c3c3c] bg-[#0d0d0d]">
+            <div className="flex shrink-0 items-center justify-between border-b border-[#3c3c3c] bg-[#1a1a1a]">
+              <div className="flex">
+                <button type="button" onClick={() => setActiveTab('output')} className={`px-4 py-2 text-xs font-semibold ${activeTab === 'output' ? 'border-b-2 border-teal-400 text-teal-400' : 'text-slate-500 hover:text-slate-300'}`}>
+                  Output
+                </button>
+                <button type="button" onClick={() => setActiveTab('serial')} className={`px-4 py-2 text-xs font-semibold ${activeTab === 'serial' ? 'border-b-2 border-teal-400 text-teal-400' : 'text-slate-500 hover:text-slate-300'}`}>
+                  Serial Monitor
+                </button>
+              </div>
+              {activeTab === 'output' && outputLines.length > 0 && (
+                <button type="button" onClick={() => setOutputLines([])} className="mr-2 text-[10px] text-slate-500 hover:text-slate-300">Clear</button>
+              )}
             </div>
             {activeTab === 'serial' && (
-              <div className="flex shrink-0 border-b border-[#3c3c3c] px-3 py-1.5">
+              <div className="flex shrink-0 border-b border-[#3c3c3c] px-3 py-2">
                 <input
                   type="text"
                   value={serialInput}
                   onChange={(e) => setSerialInput(e.target.value)}
-                  placeholder={`Message (Enter to send to '${boardName}' on '${selectedPort || '…'}')`}
-                  className="w-full rounded border border-[#3c3c3c] bg-[#252526] px-2 py-1 text-xs text-green-400 outline-none"
-                  onKeyDown={(e) => { if (e.key === 'Enter' && serialInput.trim()) { appendOutput(`[TX] ${serialInput}`); setSerialInput(''); } }}
+                  placeholder={`Send to ${boardName} on ${selectedPort || 'no port selected'}`}
+                  className="w-full rounded border border-[#333] bg-[#1a1a1a] px-2.5 py-1.5 font-mono text-xs text-green-400 outline-none focus:border-teal-600"
+                  onKeyDown={(e) => { if (e.key === 'Enter' && serialInput.trim()) { appendOutput(`[TX] ${serialInput}`); setSerialInput(''); setActiveTab('output'); } }}
                 />
               </div>
             )}
-            <div className="min-h-0 flex-1 overflow-y-auto p-3 font-mono text-xs leading-5 text-green-400">
-              {activeTab === 'output' ? outputLines.map((line, i) => <div key={i}>{line}</div>) : serialLogs.map((log, i) => <div key={i}>{log}</div>)}
-              {activeTab === 'serial' && serialLogs.length === 0 && <div className="italic text-slate-500">Run simulation or upload to see serial output.</div>}
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-5">
+              {activeTab === 'output' ? (
+                outputLines.length === 0 ? (
+                  <div className="text-slate-300">Verify or Upload to see compile output. Errors appear here in red.</div>
+                ) : (
+                  outputLines.map((line, i) => (
+                    <div key={i} className={line.includes('✗') || line.toLowerCase().includes('error') ? 'text-red-400' : line.includes('✓') ? 'text-emerald-400' : 'text-green-400'}>
+                      {line}
+                    </div>
+                  ))
+                )
+              ) : (
+                serialLogs.length === 0 ? (
+                  <div className="italic text-slate-300">Run simulation to see Serial.print output here.</div>
+                ) : (
+                  serialLogs.map((log, i) => (
+                    <div key={i} className={
+                      log.includes('[Warning]') || log.includes('[CLI Error]') || log.includes('[COMPILER ERROR]')
+                        ? 'text-amber-400'
+                        : log.includes('Error') || log.includes('error')
+                          ? 'text-red-400'
+                          : 'text-green-400'
+                    }>
+                      {log}
+                    </div>
+                  ))
+                )
+              )}
               <div ref={logsEndRef} />
             </div>
             {activeTab === 'serial' && (
-              <div className="flex shrink-0 justify-end border-t border-[#3c3c3c] p-1.5">
-                <button type="button" onClick={onClearSerial} className="rounded px-3 py-0.5 text-xs text-slate-400 hover:bg-[#3c3c3c]">Clear</button>
+              <div className="flex shrink-0 justify-end border-t border-[#3c3c3c] bg-[#1a1a1a] p-1.5">
+                <button type="button" onClick={onClearSerial} className="rounded px-3 py-1 text-xs text-slate-500 hover:bg-[#333] hover:text-white">Clear serial</button>
               </div>
             )}
           </div>
         </div>
+
+        {showAi && activeBoardId && (
+          <AiAssistant
+            boardType={resolveUploadBoardType()}
+            existingCode={activeCode}
+            componentNames={componentNames}
+            onApplyCode={(code) => {
+              updateActiveCode(code);
+              appendOutput('[AI] Code inserted into editor');
+              setActiveTab('output');
+            }}
+            onClose={() => setShowAi(false)}
+          />
+        )}
       </div>
 
       {showBoardModal && (
@@ -557,9 +632,9 @@ export const ArduinoIDEPanel: React.FC<ArduinoIDEPanelProps> = ({
           <div className="w-full max-w-2xl rounded-lg border border-[#3c3c3c] bg-[#252526] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[#3c3c3c] px-5 py-3">
               <h2 className="font-semibold text-white">Select Board and Port</h2>
-              <button type="button" onClick={() => setShowBoardModal(false)}><X className="h-5 w-5 text-slate-400" /></button>
+              <button type="button" onClick={() => setShowBoardModal(false)}><X className="h-5 w-5 text-slate-500" /></button>
             </div>
-            <p className="border-b border-[#3c3c3c] px-5 py-2 text-xs text-slate-400">Verify compiles only. Upload compiles then pushes to the selected port.</p>
+            <p className="border-b border-[#3c3c3c] px-5 py-2 text-xs text-slate-500">Verify compiles only. Upload compiles then pushes to the selected port.</p>
             <div className="grid grid-cols-2 divide-x divide-[#3c3c3c]">
               <div className="p-4">
                 <div className="mb-2 text-xs font-bold uppercase text-slate-500">Boards</div>

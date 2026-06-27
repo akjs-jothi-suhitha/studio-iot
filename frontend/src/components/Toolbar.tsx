@@ -76,12 +76,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   return (
-  <header className="flex min-h-14 shrink-0 items-center justify-between gap-2 bg-[#0f172a] px-4 text-slate-100 shadow-md select-none">
+  <header className="flex min-h-14 shrink-0 items-center justify-between gap-2 bg-[#0f172a] px-4 text-slate-100 shadow-2xl shadow-black/60 shadow-black/40 select-none">
     <div className="flex min-w-0 items-center gap-4">
       <button
         type="button"
         onClick={onBackToProjects}
-        className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-400 hover:border-slate-500 hover:text-white"
+        className="flex shrink-0 items-center gap-2 rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-500 hover:border-slate-500 hover:text-white"
       >
         <FolderOpen className="h-4 w-4" />
         Projects
@@ -133,52 +133,52 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           type="button"
           onClick={() => onChangeViewMode('circuit')}
           className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-            viewMode === 'circuit' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+            viewMode === 'circuit' ? 'bg-cyan-600 text-white shadow-2xl shadow-black/60 shadow-black/40' : 'text-slate-500 hover:text-slate-200'
           }`}
         >
           <CircuitBoard className="h-3.5 w-3.5" />
-          Circuit
+          Circuit Studio
         </button>
         <button
           type="button"
           onClick={() => onChangeViewMode('arduino')}
           className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-            viewMode === 'arduino' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+            viewMode === 'arduino' ? 'bg-cyan-600 text-white shadow-2xl shadow-black/60 shadow-black/40' : 'text-slate-500 hover:text-slate-200'
           }`}
         >
           <Code2 className="h-3.5 w-3.5" />
-          Arduino IDE
+          Code Studio
         </button>
         <button
           type="button"
           onClick={() => onChangeViewMode('dashboard')}
           className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition ${
-            viewMode === 'dashboard' ? 'bg-cyan-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'
+            viewMode === 'dashboard' ? 'bg-cyan-600 text-white shadow-2xl shadow-black/60 shadow-black/40' : 'text-slate-500 hover:text-slate-200'
           }`}
         >
           <LayoutDashboard className="h-3.5 w-3.5" />
-          IoT Dashboard
+          Cloud Dashboard
         </button>
       </div>
     </div>
 
     {viewMode === 'circuit' && (
       <div className="hidden items-center gap-1 rounded-lg bg-slate-800/50 p-1 md:flex border border-slate-700/50">
-        <button type="button" onClick={onUndo} disabled={!canUndo || isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Undo">
+        <button type="button" onClick={onUndo} disabled={!canUndo || isSimulating} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Undo">
           <Undo2 className="h-4 w-4" />
         </button>
-        <button type="button" onClick={onRedo} disabled={!canRedo || isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Redo">
+        <button type="button" onClick={onRedo} disabled={!canRedo || isSimulating} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Redo">
           <Redo2 className="h-4 w-4" />
         </button>
         <div className="mx-1 h-5 w-px bg-slate-700" />
-        <button type="button" onClick={onRotateSelected} disabled={!selectedId || isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Rotate">
+        <button type="button" onClick={onRotateSelected} disabled={!selectedId || isSimulating} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-700 hover:text-white disabled:opacity-30" title="Rotate">
           <RotateCw className="h-4 w-4" />
         </button>
-        <button type="button" onClick={onDeleteSelected} disabled={!selectedId || isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-red-400 disabled:opacity-30" title="Delete">
+        <button type="button" onClick={onDeleteSelected} disabled={!selectedId || isSimulating} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-700 hover:text-red-400 disabled:opacity-30" title="Delete">
           <Trash2 className="h-4 w-4" />
         </button>
         <div className="mx-1 h-5 w-px bg-slate-700" />
-        <button type="button" onClick={onClearCanvas} disabled={isSimulating} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-700 hover:text-red-400 disabled:opacity-30" title="Clear">
+        <button type="button" onClick={onClearCanvas} disabled={isSimulating} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-700 hover:text-red-400 disabled:opacity-30" title="Clear">
           <Eraser className="h-4 w-4" />
         </button>
       </div>

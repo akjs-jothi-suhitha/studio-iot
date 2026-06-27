@@ -48,7 +48,27 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || data.message || `Request failed (${res.status})`);
+    const errMsg = data.error || data.message || `Request failed (${res.status})`;
+    throw new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+  }
+  return data as T;
+}
+
+async function requestAllowFailure<T extends { success?: boolean; error?: string }>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(),
+      ...(options.headers as Record<string, string>),
+    },
+  });
+  const data = await res.json().catch(() => ({ success: false, error: `Invalid response (${res.status})` }));
+  if (!res.ok && data.success !== false) {
+    return { success: false, error: data.error || data.message || `Request failed (${res.status})` } as T;
   }
   return data as T;
 }
@@ -74,13 +94,13 @@ export const api = {
     request<{ success: boolean }>(`/api/projects/${id}`, { method: 'DELETE' }),
 
   compile: (codeText: string, boardType: string) =>
-    request<{ success: boolean; message?: string; error?: string; memory?: unknown }>('/api/compile', {
+    requestAllowFailure<{ success: boolean; message?: string; error?: string; memory?: unknown }>('/api/compile', {
       method: 'POST',
       body: JSON.stringify({ codeText, boardType }),
     }),
 
   upload: (codeText: string, boardType: string, port: string) =>
-    request<{ success: boolean; message?: string; error?: string }>('/api/upload', {
+    requestAllowFailure<{ success: boolean; message?: string; error?: string }>('/api/upload', {
       method: 'POST',
       body: JSON.stringify({ codeText, boardType, port }),
     }),
@@ -91,4 +111,15 @@ export const api = {
 
   cliStatus: () =>
     request<{ installed: boolean; path?: string; version?: string; message?: string }>('/api/cli-status'),
+
+  aiGenerate: (payload: {
+    prompt: string;
+    boardType: string;
+    existingCode?: string;
+    components?: string[];
+  }) =>
+    request<{ code: string }>('/api/ai/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
 };
